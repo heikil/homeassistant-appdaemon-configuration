@@ -1,0 +1,662 @@
+<!-- 
+    CONFIGURATION REQUIRED:
+    Before using this dashboard, please update the API_ENDPOINT constant 
+    in the script section at the bottom of this file to point to your 
+    AppDaemon load scheduler data endpoint.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Load Scheduler Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.1/dist/apexcharts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            color: #58a6ff;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .status-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px 20px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .status-card h3 {
+            font-size: 0.9em;
+            color: #8b949e;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-card .value {
+            font-size: 1.5em;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+
+        .chart-section {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-section h2 {
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            color: #c9d1d9;
+        }
+
+        #priceChart {
+            width: 100%;
+            height: 400px;
+        }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .device-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .device-card h3 {
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .device-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .device-status.active {
+            background: #3fb950;
+            box-shadow: 0 0 8px #3fb950;
+        }
+
+        .device-status.inactive {
+            background: #6e7681;
+        }
+
+        .device-info {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #8b949e;
+            font-size: 0.9em;
+        }
+
+        .info-value {
+            color: #c9d1d9;
+            font-weight: 500;
+        }
+
+        .schedule-timeline {
+            margin-top: 15px;
+            height: 30px;
+            background: #0d1117;
+            border-radius: 4px;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .timeline-slot {
+            flex: 1;
+            border-right: 1px solid #21262d;
+        }
+
+        .timeline-slot.active {
+            background: linear-gradient(135deg, #3fb950 0%, #2ea043 100%);
+        }
+
+        .timeline-slot.always-on {
+            background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);
+        }
+
+        .error {
+            background: #1c1917;
+            border: 1px solid #7f1d1d;
+            border-radius: 8px;
+            padding: 20px;
+            color: #fca5a5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8b949e;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85em;
+            color: #8b949e;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>⚡ Load Scheduler Dashboard</h1>
+
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>Total Scheduled Slots</h3>
+                <div class="value" id="total-slots">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Electricity Package</h3>
+                <div class="value" id="package">--</div>
+            </div>
+            <div class="status-card">
+                <h3>Weather Forecast</h3>
+                <div class="value" id="weather">--</div>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h2>📊 Electricity Prices (22:00-22:00, c/kWh)</h2>
+            <div id="priceChart"></div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #6e7681;"></div>
+                    <span>Price</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff9500;"></div>
+                    <span>Boiler</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #30d158;"></div>
+                    <span>Heating Big</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="devices-grid" id="devices"></div>
+
+        <div class="chart-section">
+            <h2>📈 Price Statistics (24h Period)</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Minimum</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-min">--</span>
+                </div>
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Maximum</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-max">--</span>
+                </div>
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Average</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-avg">--</span>
+                </div>
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Median</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-median">--</span>
+                </div>
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Cheap6h</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-cheap6h">--</span>
+                </div>
+                <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
+                    <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Volatility</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-volatility">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="loading" class="loading">Loading schedule data...</div>
+
+        <div class="footer" style="margin-top: 30px; text-align: center; color: #8b949e; font-size: 0.8em;">
+            Schedule calculated at: <span id="calculated-at">--</span>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = 'https://your_appdaemon_address:port/api/appdaemon/load_scheduler_data';
+        let chart = null;
+
+        async function fetchScheduleData() {
+            try {
+                const response = await fetch(API_ENDPOINT);
+                if (!response.ok) throw new Error('Failed to fetch data');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('error').textContent = 'Failed to load schedule data. Is AppDaemon running?';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('loading').style.display = 'none';
+                return null;
+            }
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+
+            // Update status cards
+            const totalSlots = data.devices.reduce((sum, d) => sum + (d.total_hours || 0) * 4, 0);
+            document.getElementById('total-slots').textContent = Math.round(totalSlots);
+            document.getElementById('package').textContent = (data.package || '--').toUpperCase();
+            document.getElementById('weather').textContent = data.weather ? `${data.weather.toFixed(1)}°C` : '--';
+
+            // Calculate and update price statistics
+            updatePriceStatistics(data.prices);
+
+            // Update price chart
+            renderPriceChart(data.prices, data.devices);
+
+            // Update device cards
+            renderDeviceCards(data.devices);
+
+            // Update calculation time
+            if (data.calculated_at) {
+                const date = new Date(data.calculated_at);
+                document.getElementById('calculated-at').textContent = date.toLocaleString('et-EE', { 
+                    timeZone: 'Europe/Tallinn',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+        }
+
+        function updatePriceStatistics(prices) {
+            if (!prices || prices.length === 0) return;
+
+            const priceValues = prices.map(p => p.price).sort((a, b) => a - b);
+
+            // Min and Max
+            const min = priceValues[0];
+            const max = priceValues[priceValues.length - 1];
+
+            // Average
+            const avg = priceValues.reduce((sum, p) => sum + p, 0) / priceValues.length;
+
+            // Median
+            const mid = Math.floor(priceValues.length / 2);
+            const median = priceValues.length % 2 === 0
+                ? (priceValues[mid - 1] + priceValues[mid]) / 2
+                : priceValues[mid];
+
+            // Standard deviation (volatility)
+            const variance = priceValues.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / priceValues.length;
+            const stdDev = Math.sqrt(variance);
+
+            // Find cheapest 6-hour window (24 slots)
+            let cheapestWindowSum = Infinity;
+            let cheapestWindowStart = 0;
+            for (let i = 0; i <= prices.length - 24; i++) {
+                const windowSum = prices.slice(i, i + 24).reduce((sum, p) => sum + p.price, 0);
+                if (windowSum < cheapestWindowSum) {
+                    cheapestWindowSum = windowSum;
+                    cheapestWindowStart = i;
+                }
+            }
+            const cheapestWindowAvg = cheapestWindowSum / 24;
+            const cheapestWindowTime = prices[cheapestWindowStart].time;
+
+            // Update UI
+            document.getElementById('stat-min').textContent = `${min.toFixed(2)} c/kWh`;
+            document.getElementById('stat-max').textContent = `${max.toFixed(2)} c/kWh`;
+            document.getElementById('stat-avg').textContent = `${avg.toFixed(2)} c/kWh`;
+            document.getElementById('stat-median').textContent = `${median.toFixed(2)} c/kWh`;
+            document.getElementById('stat-cheap6h').textContent = `${cheapestWindowTime} (${cheapestWindowAvg.toFixed(2)} c/kWh)`;
+            document.getElementById('stat-volatility').textContent = `±${stdDev.toFixed(2)} c/kWh`;
+        }
+
+        function renderPriceChart(prices, devices) {
+            // Define distinct colors for each device
+            const deviceColors = {
+                'Boiler': '#ff9500',      // Orange
+                'Heating Big': '#30d158', // Green
+                // Add more colors for future devices
+                'Device3': '#bf5af2',     // Purple
+                'Device4': '#ff375f',     // Red
+                'Device5': '#00c7be'      // Teal
+            };
+
+            // Prepare series data - one for prices (line) and one per device (bars)
+            const series = [
+                {
+                    name: 'Price',
+                    type: 'line',
+                    data: prices.map(p => p.price)
+                }
+            ];
+
+            // Add a series for each device showing scheduled slots
+            devices.forEach(device => {
+                const deviceData = prices.map((price, idx) => {
+                    return device.slots[idx] ? price.price : null;
+                });
+
+                series.push({
+                    name: device.name,
+                    type: 'column',
+                    data: deviceData
+                });
+            });
+
+            // Build colors array - first is price line, then device colors
+            const colors = ['#6e7681']; // Gray for price line
+            devices.forEach(device => {
+                colors.push(deviceColors[device.name] || '#64d2ff');
+            });
+
+            // Calculate current time position (dynamically)
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+
+            // Round down to nearest 15-minute slot
+            const currentTimeSlot = Math.floor(currentMinute / 15) * 15;
+            const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentTimeSlot).padStart(2, '0')}`;
+
+            // Debug logging
+            console.log('Current time:', currentTimeStr);
+
+            const options = {
+                series: series,
+                chart: {
+                    type: 'line',
+                    height: 400,
+                    background: '#161b22',
+                    foreColor: '#c9d1d9',
+                    toolbar: {
+                        show: false
+                    },
+                    animations: {
+                        enabled: false
+                    },
+                    stacked: false
+                },
+                colors: colors,
+                stroke: {
+                    width: [2, 0, 0, 0, 0, 0], // Line for price, no stroke for bars
+                    curve: 'smooth'
+                },
+                plotOptions: {
+                    bar: {
+                        columnWidth: '95%'
+                    }
+                },
+                dataLabels: {
+                    enabled: false
+                },
+                legend: {
+                    show: true,
+                    position: 'top',
+                    horizontalAlign: 'left',
+                    labels: {
+                        colors: '#c9d1d9'
+                    }
+                },
+                annotations: {
+                    xaxis: [{
+                        x: currentTimeStr,  // Use the time string directly
+                        borderColor: '#f85149',
+                        borderWidth: 2,
+                        strokeDashArray: 0,
+                        label: {
+                            text: 'Now',
+                            style: {
+                                color: '#fff',
+                                background: '#f85149',
+                                fontSize: '10px',
+                                padding: {
+                                    left: 5,
+                                    right: 5,
+                                    top: 2,
+                                    bottom: 2
+                                }
+                            },
+                            orientation: 'horizontal',
+                            offsetY: -10
+                        }
+                    }]
+                },
+                xaxis: {
+                    categories: prices.map(p => p.time),
+                    labels: {
+                        rotate: -45,
+                        rotateAlways: true,
+                        style: {
+                            colors: '#8b949e'
+                        },
+                        showDuplicates: false
+                    },
+                    axisBorder: {
+                        color: '#30363d'
+                    },
+                    axisTicks: {
+                        show: true,
+                        color: '#30363d'
+                    },
+                    tickAmount: 24,
+                    tickPlacement: 'on'
+                },
+                yaxis: {
+                    title: {
+                        text: 'Price (c/kWh)',
+                        style: {
+                            color: '#8b949e'
+                        }
+                    },
+                    labels: {
+                        style: {
+                            colors: '#8b949e'
+                        }
+                    }
+                },
+                grid: {
+                    borderColor: '#21262d'
+                },
+                tooltip: {
+                    theme: 'dark',
+                    shared: true,
+                    intersect: false,
+                    style: {
+                        fontSize: '12px'
+                    },
+                    x: {
+                        formatter: function (value, opts) {
+                            // opts.dataPointIndex gives us the actual time slot index
+                            const idx = opts.dataPointIndex;
+                            return prices[idx] ? prices[idx].time : value;
+                        }
+                    },
+                    y: {
+                        formatter: function (value, { seriesIndex, dataPointIndex, w }) {
+                            if (seriesIndex === 0) {
+                                // First series is Price - show the actual price value
+                                return value ? value.toFixed(2) + ' c/kWh' : '';
+                            } else {
+                                // Device series - show ON/OFF based on whether there's a value
+                                return value !== null ? 'ON' : 'OFF';
+                            }
+                        }
+                    }
+                }
+            };
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new ApexCharts(document.querySelector("#priceChart"), options);
+            chart.render();
+        }
+
+        function renderDeviceCards(devices) {
+            const container = document.getElementById('devices');
+            container.innerHTML = '';
+
+            // Use the same color mapping as the chart
+            const deviceColors = {
+                'Boiler': '#ff9500',      // Orange
+                'Heating Big': '#30d158', // Green
+                'Device3': '#bf5af2',     // Purple
+                'Device4': '#ff375f',     // Red
+                'Device5': '#00c7be'      // Teal
+            };
+
+            devices.forEach(device => {
+                const card = document.createElement('div');
+                card.className = 'device-card';
+
+                const statusClass = device.currently_active ? 'active' : 'inactive';
+                const totalHours = device.total_hours || 0;
+                const alwaysOnHours = device.always_on_hours || 'None';
+                const deviceColor = deviceColors[device.name] || '#3fb950';
+
+                card.innerHTML = `
+                    <h3>
+                        <span class="device-status ${statusClass}" style="background: ${deviceColor}; box-shadow: 0 0 8px ${deviceColor};"></span>
+                        ${device.name}
+                    </h3>
+                    <div class="device-info">
+                        <div class="info-row">
+                            <span class="info-label">Mode</span>
+                            <span class="info-value">${device.mode || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total Hours Scheduled</span>
+                            <span class="info-value">${totalHours.toFixed(1)}h</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Always-On Hours</span>
+                            <span class="info-value">${alwaysOnHours}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Weather Adjusted</span>
+                            <span class="info-value">${device.weather_adjustment ? 'Yes' : 'No'}</span>
+                        </div>
+                    </div>
+                    <div class="schedule-timeline" title="24-hour schedule timeline (22:00-22:00)">
+                        ${createTimeline(device.slots, device.always_on_slots, deviceColor)}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function createTimeline(slots, alwaysOnSlots, deviceColor) {
+            if (!slots) return '';
+
+            let html = '';
+            for (let i = 0; i < 96; i++) {
+                const isActive = slots[i];
+                const isAlwaysOn = alwaysOnSlots && alwaysOnSlots[i];
+                let style = '';
+                if (isActive) {
+                    if (isAlwaysOn) {
+                        style = `style="background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);"`;
+                    } else {
+                        style = `style="background: linear-gradient(135deg, ${deviceColor} 0%, ${deviceColor}dd 100%);"`;
+                    }
+                }
+                const className = isActive ? 'active' : '';
+                html += `<div class="timeline-slot ${className}" ${style}></div>`;
+            }
+            return html;
+        }
+
+        // Initial load
+        window.addEventListener('load', async function () {
+            const data = await fetchScheduleData();
+            if (data) {
+                updateDashboard(data);
+            }
+        });
+
+        // Refresh every hour
+        setInterval(async function () {
+            const data = await fetchScheduleData();
+            if (data) {
+                updateDashboard(data);
+            }
+        }, 3600000);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,20 @@
+appdaemon:
+  latitude: 0
+  longitude: 0
+  elevation: 30
+  time_zone: Europe/Tallinn
+  plugins:
+    HASS:
+      type: hass
+      ha_url: !secret ha_url
+      token: !secret ha_token
+      cert_verify: True
+http:
+  url: http://0.0.0.0:5050
+  headers:
+    Access-Control-Allow-Origin: "*"
+    Access-Control-Allow-Methods: "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers: "Content-Type"
+admin:
+api:
+hadashboard:

@@ -1,0 +1,93 @@
+##
+## Load Scheduler Dashboard
+##
+title: Load Scheduler
+widget_dimensions: [120, 120]
+widget_margins: [5, 5]
+columns: 6
+global_parameters:
+    use_comma: 0
+    precision: 1
+
+# Title
+title_label:
+    widget_type: label
+    title: Load Scheduler
+    text: Electricity Price Optimization
+
+# Status
+scheduler_status:
+    widget_type: sensor
+    title: Status
+    entity: sensor.load_scheduler_status
+
+# Price widgets
+price_current:
+    widget_type: sensor
+    title: Current Price
+    entity: sensor.electricity_price_stats
+    units: "c/kWh"
+    precision: 2
+
+price_avg:
+    widget_type: sensor
+    title: Avg Price Today
+    entity: sensor.electricity_price_stats
+    units: "c/kWh"
+    precision: 2
+
+# Boiler widgets
+boiler_label:
+    widget_type: label
+    title: Boiler (Water Heater)
+    text: ""
+
+boiler_slots:
+    widget_type: sensor
+    title: Slots Scheduled
+    entity: sensor.load_schedule_boiler
+    units: "slots"
+
+boiler_entity:
+    widget_type: switch
+    title: Boiler Switch
+    entity: switch.boiler
+
+# Heating widgets
+heating_label:
+    widget_type: label
+    title: Heating Big
+    text: ""
+
+heating_slots:
+    widget_type: sensor
+    title: Slots Scheduled
+    entity: sensor.load_schedule_heating_big
+    units: "slots"
+
+heating_entity:
+    widget_type: switch
+    title: Heating Switch
+    entity: switch.heating
+
+# Info
+info_label:
+    widget_type: label
+    title: Info
+    text: Package VORK5 | Next calc 21:50
+
+spacer:
+    widget_type: label
+    text: ""
+
+# Layout
+layout:
+    - title_label(3x1), scheduler_status(2x1), info_label(1x1)
+    - price_current(2x1), price_avg(2x1), spacer(2x1)
+    - boiler_label(6x1)
+    - boiler_slots(2x1), boiler_entity(2x1), spacer(2x1)
+    - heating_label(6x1)  
+    - heating_slots(2x1), heating_entity(2x1), spacer(2x1)
+
+
+

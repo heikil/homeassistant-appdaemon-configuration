@@ -1,0 +1,17 @@
+phase_balancer_rewrite:
+  module: pbr
+  class: PhaseBalancerRewrite
+  disable: false
+
+europark_parking:
+  module: europark_parking
+  class: EuroparkParking
+  password: !secret europark_password
+  email: !secret europark_email
+  notify_service: !secret europark_notify_service
+
+load_scheduler:
+  module: loads
+  class: LoadSchedulingApp
+  latitude: !secret latitude
+  longitude: !secret longitude

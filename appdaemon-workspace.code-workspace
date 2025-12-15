@@ -1,0 +1,33 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "github.copilot.enable": {
+            "*": true,
+            "yaml": true,
+            "plaintext": true,
+            "markdown": true,
+            "python": true
+        },
+        "files.associations": {
+            "*.py": "python",
+            "*.yaml": "yaml"
+        },
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "github.copilot.advanced": {
+            "debug.overrideEngine": "copilot-chat",
+            "debug.useNodejs": false
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "github.copilot",
+            "github.copilot-chat",
+            "ms-python.python",
+            "redhat.vscode-yaml"
+        ]
+    }
+}
