@@ -119,7 +119,7 @@ class LoadsWeatherManager:
     def calculate_heating_slots(
         self,
         forecast_temp: float,
-        heating_curve: int = 0,
+        heating_curve: float = 0.0,
         power_factor: float = 0.5,
         period_hours: int = 24,
         max_temp: float = 16.0
@@ -133,7 +133,7 @@ class LoadsWeatherManager:
         
         Args:
             forecast_temp: Forecast "feels like" temperature in °C
-            heating_curve: Heating curve adjustment (-4 to +8)
+            heating_curve: Heating curve adjustment (-4.0 to +8.0)
             power_factor: Power factor (default 0.5)
             period_hours: Period to calculate for (6, 12, or 24)
             max_temp: Maximum temperature threshold (default 16°C)
@@ -171,7 +171,7 @@ class LoadsWeatherManager:
     
     def get_heating_requirement(
         self,
-        heating_curve: int = 0,
+        heating_curve: float = 0.0,
         power_factor: float = 0.5,
         period_hours: int = 24,
         min_slots: int = 0
@@ -180,7 +180,7 @@ class LoadsWeatherManager:
         Get heating slots required based on current forecast
         
         Args:
-            heating_curve: Heating curve adjustment (-4 to +8)
+            heating_curve: Heating curve adjustment (-4.0 to +8.0)
             power_factor: Power factor (default 0.5)
             period_hours: Period to calculate for (6, 12, or 24)
             min_slots: Minimum slots to return (from config)

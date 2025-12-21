@@ -64,6 +64,7 @@ class LoadDevice:
     inverted_logic: bool = False
     always_on_hours: Optional[str] = None  # "9-11,13-15,20-22" - Always ON during these hours
     always_off_hours: Optional[str] = None  # "6-8,12-14,18-20" - Always OFF during these hours (overrides cheap slots)
+    always_on_price: Optional[float] = None  # Price threshold (cents/kWh) - Always ON if price is below this
     
     # Runtime state
     scheduled_slots: List[bool] = field(default_factory=lambda: [False] * 96)
@@ -145,8 +146,9 @@ DEVICES = [
         max_price_rank=None,
         weather_adjustment=False,
         inverted_logic=False,
-        always_on_hours="20-21",  # Always ON during these hours (in addition to period scheduling)
-        always_off_hours="22-24"  # Always OFF during these hours (overrides cheap slots) 
+        always_on_hours="20",  # Always ON during these hours (in addition to period scheduling)
+        always_off_hours="22-24",  # Always OFF during these hours (overrides cheap slots)
+        always_on_price=6.0  # Always ON if price < always_on_price cents/kWh
     ),
     LoadDevice(
         name="Heating Big",
@@ -159,10 +161,11 @@ DEVICES = [
         max_price_rank=None,  # Not used in PERIOD mode
         weather_adjustment=True,
         heating_curve=0,  # Adjust -4.0 to +8.0 to change sensitivity
-        power_factor=0.5,  # Standard for 24h heating
+        power_factor=0.55,  # Standard for 24h heating
         inverted_logic=False,
         always_on_hours=None,  # No forced ON hours
-        always_off_hours=None  # No forced OFF hours
+        always_off_hours=None,  # No forced OFF hours
+        always_on_price=6.0  # Always ON if price < always_on_price cents/kWh
     ),
     # Add more devices as needed
 ]

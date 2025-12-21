@@ -148,6 +148,21 @@ class LoadsScheduler:
         # Apply always_on/off constraints to this device's price slots
         self._apply_slot_constraints(device, device_prices)
         
+        # Apply always_on_price constraint
+        if device.always_on_price is not None:
+            price_threshold_count = 0
+            for idx, price_slot in enumerate(device_prices):
+                # Check if price is below threshold (convert total_price to cents)
+                if (price_slot.total_price * 100) < device.always_on_price:
+                    # Only enable if not explicitly forced OFF
+                    if not price_slot.always_off:
+                        # Mark as always_on so it's treated same as time-based always-on
+                        price_slot.always_on = True
+                        price_threshold_count += 1
+            
+            if price_threshold_count > 0:
+                self.log(f"{device.name}: Price threshold < {device.always_on_price}c/kWh enabled {price_threshold_count} slots")
+        
         # Initialize result slots
         slots = [False] * 96
         

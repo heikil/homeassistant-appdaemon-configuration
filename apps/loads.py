@@ -384,6 +384,7 @@ class LoadSchedulingApp(hass.Hass):
                     'always_on_slots': [False] * 96,
                     'total_hours': sum(device.scheduled_slots) / 4,
                     'always_on_hours': device.always_on_hours if device.always_on_hours else "None",
+                    'always_on_price': device.always_on_price,
                     'weather_adjustment': device.weather_adjustment,
                     'currently_active': sum(device.scheduled_slots) > 0,
                     'weather_info': f"{getattr(self.scheduler, 'avg_temp', 'N/A')}°C" if hasattr(self, 'scheduler') else None
