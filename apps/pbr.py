@@ -17,6 +17,8 @@ from pbr_modes import ModeManager
 from pbr_data_manager import DataManager
 from pbr_state import StateEngine
 from pbr_tools import ForcedChargingTool, ForcedDischargingTool, ChargingAdjustmentTool, ExportLimitationTool, DischargeLimitationTool
+from pbr_load_switching_tool import LoadSwitchingTool
+from loads_config import DEVICES
 from pbr_action_executor import ActionExecutor
 from pbr_actions import ChargingAdjustmentAction, DischargeLimitationAction, ForcedChargingAction, ForcedDischargingAction, ExportLimitationAction
 from pbr_fast_trigger import FastPhaseTrigger
@@ -64,7 +66,8 @@ class PhaseBalancerRewrite(hass.Hass):
             'forced_discharging': ForcedDischargingTool(self),
             'charging_adjustment': ChargingAdjustmentTool(self),
             'export_limitation': ExportLimitationTool(self),
-            'discharge_limitation': DischargeLimitationTool(self)
+            'discharge_limitation': DischargeLimitationTool(self),
+            'load_switching': LoadSwitchingTool(self, DEVICES)
         }
 
         # Initialize mode manager (instance with tools for transitions)
@@ -475,7 +478,9 @@ class PhaseBalancerRewrite(hass.Hass):
 
         # Modes where we STILL want to run balancing/charging logic while heating is on.
         # These modes require the ability to charge (e.g., buy or frequency regulation importing).
-        charge_allowed_modes = ['buy', 'frrdown', 'savebattery', 'nobattery', 'normal']  # Extend list if needed: e.g. ['buy', 'frrdown']
+        # We also include 'frrup' here so that LoadSwitchingTool can run to turn OFF heating,
+        # even though battery discharge will be blocked by protection.
+        charge_allowed_modes = ['buy', 'frrdown', 'frrup', 'savebattery', 'nobattery', 'normal']  # Extend list if needed: e.g. ['buy', 'frrdown']
 
         if mode in charge_allowed_modes:
             current_discharge_limit = system_state.get('discharging_rate_limit', 0)
@@ -599,6 +604,26 @@ class PhaseBalancerRewrite(hass.Hass):
                         battery_flow_change = remaining_from_tool
                 else:
                     self.log_if_enabled(f"DEBUG discharge_limitation: returned None", level="DEBUG")
+
+            elif tool_name == 'load_switching':
+                # For FRRDOWN, load_switching needs the original positive value (positive = need more import)
+                # For FRRUP, load_switching needs negative value (negative = need more export)
+                flow_for_switching = -battery_flow_change if mode == 'frrdown' else battery_flow_change
+                
+                action = self.tools['load_switching'].get_proposed_action(
+                    flow_for_switching, 
+                    mode, 
+                    reason=f"Load switching for {mode}"
+                )
+                
+                if action['action']:
+                    actions.append(action['action'])
+                    
+                    remaining_from_tool = action.get('remaining', flow_for_switching)
+                    if mode == 'frrdown':
+                        battery_flow_change = -remaining_from_tool
+                    else:
+                        battery_flow_change = remaining_from_tool
 
         return actions
 

@@ -62,6 +62,9 @@ class LoadSchedulingApp(hass.Hass):
             # Schedule daily calculation using robust timezone handling
             self._schedule_next_run()
             
+            # Schedule energy debt check every minute
+            self.run_every(self._check_energy_debt, "now", 60)
+            
             # Run immediately on startup if configured (Manual Run)
             if GLOBAL_CONFIG.run_on_startup:
                 self.log("run_on_startup=True, triggering immediate calculation...")
@@ -251,7 +254,7 @@ class LoadSchedulingApp(hass.Hass):
         
         for device in DEVICES:
             if device.name == device_name:
-                service_name = "homeassistant.turn_on" if turn_on else "homeassistant.turn_off"
+                service_name = "homeassistant/turn_on" if turn_on else "homeassistant/turn_off"
                 self.call_service(service_name, entity_id=device.entity_id)
                 self.log(f"Override {device_name}: {'ON' if turn_on else 'OFF'}")
                 self.fire_event("loads_device_override", 
@@ -336,6 +339,7 @@ class LoadSchedulingApp(hass.Hass):
                         'schedule_ids': device.schedule_ids,
                         'scheduled_slots': device.scheduled_slots,  # Add the actual slot array!
                         'enabled': device.scheduling_enabled,
+                        'energy_debt': getattr(device, 'energy_debt', 0),
                         'last_update': self.datetime().isoformat()
                     }
                 )
@@ -430,4 +434,125 @@ class LoadSchedulingApp(hass.Hass):
     def terminate(self):
         """Cleanup on termination"""
         self.log("Load Scheduling Application terminating")
+
+    def _check_energy_debt(self, kwargs):
+        """Check for energy debt and attempt recovery"""
+        # Run every minute
+        
+        if not hasattr(self.scheduler, 'price_slots') or not self.scheduler.price_slots:
+            return
+
+        now = datetime.now(self.scheduler.tz)
+        
+        # Find current slot index
+        # price_slots[0] is start time (e.g. 22:00 yesterday or today)
+        start_time = self.scheduler.price_slots[0].timestamp
+        
+        # Check if we are in the valid range of current schedule
+        # Schedule covers 24h from start_time
+        if not (start_time <= now < start_time + timedelta(hours=24)):
+            return
+
+        # Calculate slot index (0-95)
+        diff = now - start_time
+        current_slot_idx = int(diff.total_seconds() // 900) # 15 min slots
+        
+        if not (0 <= current_slot_idx < 96):
+            return
+
+        for device in DEVICES:
+            if not device.scheduling_enabled:
+                continue
+                
+            # 1. Track Debt / Payback
+            is_scheduled_on = device.scheduled_slots[current_slot_idx]
+            
+            # Get actual state
+            actual_state = self.get_state(device.entity_id)
+            is_actual_on = actual_state == "on"
+            
+            if is_scheduled_on and not is_actual_on:
+                # Accumulate debt (1 minute)
+                device.energy_debt += 1
+                if device.energy_debt > device.max_energy_debt:
+                    device.energy_debt = device.max_energy_debt
+                # Log occasionally
+                if device.energy_debt % 15 == 0:
+                    self.log(f"{device.name}: Energy debt increased to {device.energy_debt} min")
+                    
+            elif not is_scheduled_on and is_actual_on:
+                # Payback debt
+                if device.energy_debt > 0:
+                    device.energy_debt -= 1
+                    if device.energy_debt == 0:
+                        self.log(f"{device.name}: Energy debt fully repaid")
+            
+            # 2. Attempt Recovery if needed
+            if device.energy_debt > 0 and not is_scheduled_on and not is_actual_on:
+                self._attempt_recovery(device, current_slot_idx, now)
+                
+            # Update sensor with debt info
+            self._update_device_sensor_debt(device)
+
+    def _attempt_recovery(self, device, current_slot_idx, now):
+        """Attempt to recover energy debt"""
+        # Look ahead recovery_window_hours
+        slots_to_check = device.recovery_window_hours * 4
+        
+        candidates = []
+        
+        for i in range(slots_to_check):
+            idx = current_slot_idx + i
+            if idx >= 96:
+                break # End of schedule
+                
+            # Must be unscheduled
+            if device.scheduled_slots[idx]:
+                continue
+                
+            # Check price
+            price_slot = self.scheduler.price_slots[idx]
+            price_cents = price_slot.total_price * 100
+            
+            if device.max_recovery_price and price_cents > device.max_recovery_price:
+                continue
+                
+            candidates.append({
+                'idx': idx,
+                'price': price_cents,
+                'time': price_slot.timestamp
+            })
+            
+        if not candidates:
+            return
+            
+        # Sort by price
+        candidates.sort(key=lambda x: x['price'])
+        
+        # How many slots do we need?
+        # Debt is in minutes. Each slot is 15 min.
+        # We need ceil(debt / 15) slots.
+        import math
+        slots_needed = math.ceil(device.energy_debt / 15)
+        
+        # Take top N cheapest
+        best_slots = candidates[:slots_needed]
+        best_indices = [c['idx'] for c in best_slots]
+        
+        # Is CURRENT slot one of the best?
+        if current_slot_idx in best_indices:
+            self.log(f"{device.name}: Recovery triggered! Debt={device.energy_debt}m")
+            self.call_service("homeassistant/turn_on", entity_id=device.entity_id)
+
+    def _update_device_sensor_debt(self, device):
+        """Update sensor with debt attribute"""
+        sensor_id = f"sensor.load_schedule_{device.name.lower().replace(' ', '_')}"
+        current = self.get_state(sensor_id, attribute="all")
+        if current:
+            attrs = current['attributes']
+            # Only update if changed to avoid spamming events
+            if attrs.get('energy_debt') != device.energy_debt:
+                attrs['energy_debt'] = device.energy_debt
+                self.set_state(sensor_id, state=current['state'], attributes=attrs)
+
 

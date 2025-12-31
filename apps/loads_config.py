@@ -66,6 +66,12 @@ class LoadDevice:
     always_off_hours: Optional[str] = None  # "6-8,12-14,18-20" - Always OFF during these hours (overrides cheap slots)
     always_on_price: Optional[float] = None  # Price threshold (cents/kWh) - Always ON if price is below this
     
+    # Energy Recovery (Comfort Maintenance)
+    energy_debt: int = 0  # Minutes of scheduled time lost due to overrides
+    max_energy_debt: int = 180  # Maximum debt to accumulate (minutes)
+    recovery_window_hours: int = 4  # Try to recover debt within next N hours
+    max_recovery_price: Optional[float] = 50.0  # Max price (cents/kWh) for recovery slots
+    
     # Runtime state
     scheduled_slots: List[bool] = field(default_factory=lambda: [False] * 96)
     schedule_ids: Dict[str, int] = field(default_factory=dict)
@@ -127,7 +133,7 @@ GLOBAL_CONFIG = GlobalConfig(
     latitude=59.431,  # Overridden by secrets in apps.yaml
     longitude=24.743,  # Overridden by secrets in apps.yaml
     schedule_time="21:50",  # Fixed timezone handling - runs at exact time before 22:00 market window
-    run_on_startup=True,  # Run calculation immediately when app starts
+    run_on_startup=False,  # Run calculation immediately when app starts
     shelly_delay_between_deletes=1.0,  # Delay between delete operations (seconds)
     shelly_delay_between_creates=1.0  # Delay between schedule creations (seconds)
 )

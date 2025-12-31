@@ -17,7 +17,8 @@ from pbr_actions import (
     DischargeLimitationAction,
     ForcedChargingAction,
     ForcedDischargingAction,
-    ExportLimitationAction
+    ExportLimitationAction,
+    LoadSwitchingAction
 )
 
 
@@ -80,6 +81,9 @@ class ActionExecutor:
                 
                 elif isinstance(action, ExportLimitationAction):
                     tool.execute(action.target_limit, reason=action.reason)
+                
+                elif isinstance(action, LoadSwitchingAction):
+                    tool.execute_action(action)
                 
                 else:
                     self.hass.log_if_enabled(f"Unknown action type: {type(action)}", level="WARNING")

@@ -72,11 +72,26 @@ class ExportLimitationAction:
         return f"Set export limit to {self.target_limit}W"
 
 
+@dataclass
+class LoadSwitchingAction:
+    """Action to switch loads ON/OFF"""
+    tool: Literal['load_switching'] = 'load_switching'
+    loads: list = None  # List of load names switched
+    turn_on: bool = False # True = Turn ON, False = Turn OFF
+    power_change: int = 0  # Power change achieved (positive = more import/less export)
+    reason: str = ""
+    
+    def description(self) -> str:
+        action = "ON" if self.turn_on else "OFF"
+        return f"Switch loads {self.loads} {action} (change: {self.power_change}W)"
+
+
 # Union type for all possible actions
 Action = (
     ChargingAdjustmentAction |
     DischargeLimitationAction |
     ForcedChargingAction |
     ForcedDischargingAction |
-    ExportLimitationAction
+    ExportLimitationAction |
+    LoadSwitchingAction
 )
