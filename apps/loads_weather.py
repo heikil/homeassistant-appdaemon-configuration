@@ -8,6 +8,8 @@ This module is standalone and reusable - no pbr.py dependencies.
 """
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from dataclasses import dataclass
@@ -75,7 +77,19 @@ class LoadsWeatherManager:
             query_url = f"{url}?hourly=apparent_temperature&timezone={self.timezone}&forecast_hours={hours}&latitude={self.latitude}&longitude={self.longitude}"
             print(f"Forecast query: {query_url}")
             
-            response = requests.get(url, params=params, timeout=10)
+            # Configure retry strategy
+            retry_strategy = Retry(
+                total=3,
+                backoff_factor=2,  # wait 2s, 4s, 8s...
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["GET"]
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            http = requests.Session()
+            http.mount("https://", adapter)
+            http.mount("http://", adapter)
+            
+            response = http.get(url, params=params, timeout=10)
             response.raise_for_status()
             
             data = response.json()
