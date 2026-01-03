@@ -116,7 +116,7 @@ class GlobalConfig:
     latitude: float = 59.431
     longitude: float = 24.743
     schedule_time: str = "21:50"
-    run_on_startup: bool = False  # Run calculation immediately when app starts
+    run_on_startup: bool = True  # Run calculation immediately when app starts
     shelly_delay_between_deletes: float = 1.0  # Seconds between delete operations
     shelly_delay_between_creates: float = 1.0  # Seconds between schedule creation operations
 
@@ -152,7 +152,7 @@ DEVICES = [
         max_price_rank=None,
         weather_adjustment=False,
         inverted_logic=False,
-        always_on_hours=None,  # Always ON during these hours (in addition to period scheduling)
+        always_on_hours="20",  # Always ON during these hours (in addition to period scheduling)
         always_off_hours="22-24",  # Always OFF during these hours (overrides cheap slots)
         always_on_price=7.0  # Always ON if price < always_on_price cents/kWh
     ),
@@ -166,8 +166,8 @@ DEVICES = [
         desired_on_hours=0,  # Baseline hours (will be adjusted by weather)
         max_price_rank=None,  # Not used in PERIOD mode
         weather_adjustment=True,
-        heating_curve=0,  # Adjust -4.0 to +8.0 to change sensitivity
-        power_factor=0.6,  # Standard for 24h heating
+        heating_curve=-1,  # Adjust -4.0 to +8.0 to change sensitivity
+        power_factor=0.5,  # Standard for 24h heating
         inverted_logic=False,
         always_on_hours=None,  # No forced ON hours
         always_off_hours=None,  # No forced OFF hours

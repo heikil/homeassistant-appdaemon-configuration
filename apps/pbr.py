@@ -494,6 +494,19 @@ class PhaseBalancerRewrite(hass.Hass):
                 self.action_executor.execute_actions([protection_action], mode)
             else:
                 self.log_if_enabled(f"HEATING PROTECTION: {load_name} ON - discharge already blocked (mode={mode}, charging allowed)")
+            
+            # Stop forced discharge if active (it shouldn't be running during heating protection)
+            current_forced_flow = system_state.get('forced_power_flow', 0)
+            if current_forced_flow < 0: # Negative = discharging
+                self.log_if_enabled(f"HEATING PROTECTION: {load_name} ON - stopping active forced discharge (mode={mode})")
+                self.tools['forced_discharging'].stop(reason=f"Heating protection: {load_name} active")
+                # Update local system state
+                system_state['forced_power_flow'] = 0
+            
+            # Update local system state to reflect that discharge is blocked (even if we didn't just change it)
+            # This ensures subsequent logic knows discharge capacity is 0
+            system_state['discharging_rate_limit'] = 0
+
             # Do NOT skip balancing for these modes so charging / other tools can proceed
             return False
 
@@ -512,6 +525,12 @@ class PhaseBalancerRewrite(hass.Hass):
                 )
                 self.action_executor.execute_actions([protection_action], mode)
             
+            # Stop forced discharge if active (it shouldn't be running during heating protection)
+            current_forced_flow = system_state.get('forced_power_flow', 0)
+            if current_forced_flow < 0: # Negative = discharging
+                self.log_if_enabled(f"HEATING PROTECTION: {load_name} ON - stopping active forced discharge (mode={mode})")
+                self.tools['forced_discharging'].stop(reason=f"Heating protection: {load_name} active")
+
             # Skip all balancing - no phase balancing while heating is on
             return True
         
@@ -585,9 +604,8 @@ class PhaseBalancerRewrite(hass.Hass):
                     battery_flow_change = 0  # Export limitation satisfies remaining need
 
             elif tool_name == 'discharge_limitation':
-                # For FRRDOWN, discharge_limitation needs the original positive value
-                # (positive = need more import = reduce discharge limit)
-                flow_for_discharge = -battery_flow_change if mode == 'frrdown' else battery_flow_change
+                # flow_change is already inverted for FRRDOWN in main loop
+                flow_for_discharge = battery_flow_change
                 self.log_if_enabled(f"DEBUG discharge_limitation input: mode={mode}, battery_flow_change={battery_flow_change:.0f}W, flow_for_discharge={flow_for_discharge:.0f}W", level="DEBUG")
                 action = self._handle_discharge_limitation(system_state, flow_for_discharge)
                 if action:
@@ -596,23 +614,35 @@ class PhaseBalancerRewrite(hass.Hass):
                         actions.append(action['action'])
                         self.log_if_enabled(f"DEBUG discharge_limitation: action={action['action'].description()}, remaining={action.get('remaining', battery_flow_change):.1f}W", level="DEBUG")
                     # CRITICAL: In FRRDOWN, need to convert 'remaining' back to negated form
-                    remaining_from_tool = action.get('remaining', flow_for_discharge)
-                    if mode == 'frrdown':
-                        battery_flow_change = -remaining_from_tool
-                        self.log_if_enabled(f"DEBUG discharge_limitation FRRDOWN: tool_remaining={remaining_from_tool:.0f}W, converted_back={battery_flow_change:.0f}W", level="DEBUG")
-                    else:
-                        battery_flow_change = remaining_from_tool
+                    battery_flow_change = remaining_from_tool
                 else:
                     self.log_if_enabled(f"DEBUG discharge_limitation: returned None", level="DEBUG")
 
             elif tool_name == 'load_switching':
                 # For FRRDOWN, load_switching needs the original positive value (positive = need more import)
                 # For FRRUP, load_switching needs negative value (negative = need more export)
-                flow_for_switching = -battery_flow_change if mode == 'frrdown' else battery_flow_change
+                # NOTE: battery_flow_change is already negated for frrdown in the main loop!
+                # So we simply pass battery_flow_change directly.
+                flow_for_switching = battery_flow_change
+                
+                # Calculate available battery capacity to handle overshoot
+                # Charge capacity: How much MORE can we charge? (Limit - Current)
+                # Note: Battery power is positive for charging, negative for discharging
+                # Example: Limit 5000, Current -2000. Cap = 5000 - (-2000) = 7000.
+                limit_charge = system_state.get('charging_rate_limit', self.config.max_battery_power)
+                current_power = system_state.get('battery_power', 0)
+                available_charge_capacity = limit_charge - current_power
+                
+                # Discharge capacity: How much MORE can we discharge? (Current + Limit)
+                # Example: Limit 5000, Current 2000. Cap = 2000 + 5000 = 7000.
+                limit_discharge = system_state.get('discharging_rate_limit', self.config.max_battery_power)
+                available_discharge_capacity = limit_discharge + current_power
                 
                 action = self.tools['load_switching'].get_proposed_action(
                     flow_for_switching, 
                     mode, 
+                    available_charge_capacity=available_charge_capacity,
+                    available_discharge_capacity=available_discharge_capacity,
                     reason=f"Load switching for {mode}"
                 )
                 
@@ -620,10 +650,7 @@ class PhaseBalancerRewrite(hass.Hass):
                     actions.append(action['action'])
                     
                     remaining_from_tool = action.get('remaining', flow_for_switching)
-                    if mode == 'frrdown':
-                        battery_flow_change = -remaining_from_tool
-                    else:
-                        battery_flow_change = remaining_from_tool
+                    battery_flow_change = remaining_from_tool
 
         return actions
 

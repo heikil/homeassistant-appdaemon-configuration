@@ -123,8 +123,10 @@ class FastPhaseTrigger:
                     heating_active = bool(self.get_heating_active())
                 if heating_active:
                     if self.config.log_triggers:
-                        self.log_if_enabled(f"FAST TRIGGER SUPPRESSED: {phase_name}={phase_value:.0f}W "
-                                           f"(heating active)")
+                        # User requested suppression of this specific log
+                        # self.log_if_enabled(f"FAST TRIGGER SUPPRESSED: {phase_name}={phase_value:.0f}W "
+                        #                   f"(heating active)")
+                        pass
                     return
             except Exception:
                 # If heating check fails, fall through and allow triggering
@@ -173,8 +175,10 @@ class FastPhaseTrigger:
         if time_since_last < self.config.fast_trigger_minimum_interval:
             # Too soon - still in lockout period
             if self.config.log_triggers:
-                self.log_if_enabled(f"FAST TRIGGER: {phase_name} conditions met but in lockout "
-                                   f"({time_since_last:.1f}s < {self.config.fast_trigger_minimum_interval}s)")
+                # User requested suppression of this specific log
+                # self.log_if_enabled(f"FAST TRIGGER: {phase_name} conditions met but in lockout "
+                #                   f"({time_since_last:.1f}s < {self.config.fast_trigger_minimum_interval}s)")
+                pass
             return False
         
         # All conditions met

@@ -16,7 +16,7 @@ class LoadSwitchingTool:
         self.devices = devices
         self.log = hass.log
     
-    def get_proposed_action(self, power_needed: float, mode: str, reason: str) -> Dict:
+    def get_proposed_action(self, power_needed: float, mode: str, reason: str, available_charge_capacity: float = 0, available_discharge_capacity: float = 0) -> Dict:
         """
         Calculate proposed load switching action
         
@@ -24,17 +24,31 @@ class LoadSwitchingTool:
             power_needed: Power to adjust (negative = need more export, positive = need more import)
             mode: 'frrup' or 'frrdown'
             reason: Logging explanation
+            available_charge_capacity: Battery capacity to absorb overshoot when reducing consumption (turning off loads)
+            available_discharge_capacity: Battery capacity to support overshoot when increasing consumption (turning on loads)
             
         Returns:
             Dict with 'action' (LoadSwitchingAction) and 'remaining' power
         """
-        if mode == "frrup" and power_needed < 0:
-            # FRRUP: Need to export more - turn OFF loads
-            return self._plan_frrup(abs(power_needed), reason)
+        # Store for internal methods
+        self._available_charge_capacity = available_charge_capacity
+        self._available_discharge_capacity = available_discharge_capacity
+
+        if mode == "frrup":
+            if power_needed < 0:
+                # Need to export more (or consume less) -> Turn OFF loads
+                return self._plan_frrup(abs(power_needed), reason)
+            else:
+                # Need to export less (or consume more) -> Turn ON loads
+                return self._plan_frrdown(power_needed, reason)
         
-        elif mode == "frrdown" and power_needed > 0:
-            # FRRDOWN: Need to import more - turn ON loads
-            return self._plan_frrdown(power_needed, reason)
+        elif mode == "frrdown":
+            if power_needed > 0:
+                # Need to import more -> Turn ON loads
+                return self._plan_frrdown(power_needed, reason)
+            else:
+                # Need to import less -> Turn OFF loads
+                return self._plan_frrup(abs(power_needed), reason)
         
         return {
             'action': None,
@@ -85,12 +99,15 @@ class LoadSwitchingTool:
         loads_switched = []
         
         for device in available_loads:
-            # Select device if it fits within the remaining power needed
-            # We prefer undershooting (and letting battery handle the rest) 
-            # rather than overshooting (which would require counter-action)
-            if device.estimated_power <= (power_needed - power_freed):
+            # Select device if it fits within the remaining power needed OR if battery can absorb the overshoot
+            # Overshoot allowed = power_needed + available_charge_capacity
+            if device.estimated_power <= (power_needed - power_freed + self._available_charge_capacity):
                 loads_switched.append(device.name)
                 power_freed += device.estimated_power
+                
+                # Stop if we already met/exceeded the requirement
+                if power_freed >= power_needed:
+                    break
         
         if not loads_switched:
             return {'action': None, 'remaining': -power_needed}
@@ -129,12 +146,15 @@ class LoadSwitchingTool:
         loads_switched = []
         
         for device in available_loads:
-            # Select device if it fits within the remaining power needed
-            # We prefer undershooting (and letting battery handle the rest) 
-            # rather than overshooting (which would require counter-action)
-            if device.estimated_power <= (power_needed - power_consumed):
+            # Select device if it fits within the remaining power needed OR if battery can support the overshoot
+            # Overshoot allowed = power_needed + available_discharge_capacity
+            if device.estimated_power <= (power_needed - power_consumed + self._available_discharge_capacity):
                 loads_switched.append(device.name)
                 power_consumed += device.estimated_power
+                
+                # Stop if we already met/exceeded the requirement
+                if power_consumed >= power_needed:
+                    break
             
         if not loads_switched:
             return {'action': None, 'remaining': power_needed}

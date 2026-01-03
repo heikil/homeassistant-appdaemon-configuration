@@ -34,7 +34,9 @@ class LoadsPriceManager:
     VAT_RATE = 1.24  # 24% VAT
     RENEWABLE_ENERGY_FEE = 0.0084  # 0.84 c/kWh = 0.0084 EUR/kWh (before VAT)
     ELECTRICITY_EXCISE = 0.0021  # 0.21 c/kWh = 0.0021 EUR/kWh (before VAT)
-    SELLER_MARGIN = 0.00407  # 0.407 c/kWh = 0.00407 EUR/kWh (before VAT)
+    BALANCING_FEE = 0.00373  # 0.373 c/kWh = 0.00373 EUR/kWh (before VAT)
+    SECURITY_FEE = 0.00758  # 0.758 c/kWh = 0.00758 EUR/kWh (before VAT)
+    SELLER_MARGIN = 0.00413 / 1.24  # 0.413 c/kWh (with VAT) -> converted to EUR/kWh (before VAT)
     
     def __init__(self, network_provider: str, electricity_package: str, 
                  country: str, timezone_str: str):
@@ -119,8 +121,8 @@ class LoadsPriceManager:
                         spot = entry['entryPerArea']['EE'] / 1000.0  # MWh -> kWh
                         network = self._calc_network_fee(ts, spot)
                         
-                        # Add renewable energy fee, electricity excise, and seller margin (before VAT)
-                        spot_with_fees = spot + self.RENEWABLE_ENERGY_FEE + self.ELECTRICITY_EXCISE + self.SELLER_MARGIN
+                        # Add renewable energy fee, electricity excise, balancing fee, security fee, and seller margin (before VAT)
+                        spot_with_fees = spot + self.RENEWABLE_ENERGY_FEE + self.ELECTRICITY_EXCISE + self.BALANCING_FEE + self.SECURITY_FEE + self.SELLER_MARGIN
                         
                         # Apply VAT to spot (with fees) and network separately
                         spot_with_vat = spot_with_fees * self.VAT_RATE
@@ -203,8 +205,8 @@ class LoadsPriceManager:
             
             network = self._calc_network_fee(ts, spot)
             
-            # Add renewable energy fee, electricity excise, and seller margin (before VAT)
-            spot_with_fees = spot + self.RENEWABLE_ENERGY_FEE + self.ELECTRICITY_EXCISE + self.SELLER_MARGIN
+            # Add renewable energy fee, electricity excise, balancing fee, security fee, and seller margin (before VAT)
+            spot_with_fees = spot + self.RENEWABLE_ENERGY_FEE + self.ELECTRICITY_EXCISE + self.BALANCING_FEE + self.SECURITY_FEE + self.SELLER_MARGIN
             
             # Apply VAT to spot (with fees) and network separately
             spot_with_vat = spot_with_fees * self.VAT_RATE

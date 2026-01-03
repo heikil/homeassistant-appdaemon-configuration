@@ -17,9 +17,9 @@ class Config:
 
     # Testing overrides - set these to simulate different modes/sources without changing inverter
     qw_override_enabled: ClassVar[bool] = False  # Enable override for testing
-    qw_override_mode: ClassVar[Optional[str]] = "frrdown"  # Override value for qw_mode (e.g., 'timed', 'maximizeselfconsumption')
+    qw_override_mode: ClassVar[Optional[str]] = "frrup"  # Override value for qw_mode (e.g., 'timed', 'maximizeselfconsumption')
     qw_override_source: ClassVar[Optional[str]] = "kratt"  # Override value for qw_source (e.g., 'battery', 'grid', 'solar')
-    qw_override_powerlimit: ClassVar[Optional[int]] = 2500  # Override value for qw_powerlimit (e.g., 5000, 0)
+    qw_override_powerlimit: ClassVar[Optional[int]] = 2600  # Override value for qw_powerlimit (e.g., 5000, 0)
 
     # Battery SOC thresholds
     battery_soc_minimum_for_discharging: ClassVar[float] = 6.0  # Minimum SOC % for allowing discharging
