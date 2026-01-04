@@ -233,13 +233,14 @@ class PhaseBalancerRewrite(hass.Hass):
             return
         
         # Log other config changes
-        self.log_if_enabled(f"Config updated: {sensor_name} = {old} → {new}")
+        # self.log_if_enabled(f"Config updated: {sensor_name} = {old} → {new}")
         
         self.history_manager.add_event("config_change", f"{entity} changed to {new}", {"old": old, "new": new})
         
         # If mode/source changed, may need to trigger mode transition
         if entity in [self.config.qw_mode_sensor, self.config.qw_source_sensor]:
-            self.log_if_enabled(f"Mode/source change detected, will re-evaluate on next control loop")
+            # self.log_if_enabled(f"Mode/source change detected, will re-evaluate on next control loop")
+            pass
     
     def _reset_to_safe_state(self):
         """Reset system to safe state (equivalent to normal mode) when actions are disabled"""
@@ -992,19 +993,19 @@ class PhaseBalancerRewrite(hass.Hass):
         parts = [
             f"{mode}({qw_source})",
             f"[{phases[0]:.0f},{phases[1]:.0f},{phases[2]:.0f}]",
-            f"{system_state['battery_power']:.0f}W",
         ]
         
-        # Add forced flow if active
+        # Add Power Meter Total (PM) after phases
+        parts.append(f"PM:{system_state['total_grid_flow']:.0f}W")
+
+        # Battery Block: B:{flow}W {soc}% C:{charge}W D:{discharge}W
+        battery_part = f"B:{system_state['battery_power']:.0f}W {system_state['battery_soc']:.0f}% C:{system_state['charging_rate_limit']:.0f}W D:{system_state['discharging_rate_limit']:.0f}W"
+        
+        # Add F: forced power if active and non-zero
         if forced_power_flow != 0:
-            parts.append(f"F:{forced_power_flow:.0f}W")
-        
-        # Add charging and discharging limits
-        parts.append(f"C:{system_state['charging_rate_limit']:.0f}W")
-        parts.append(f"D:{system_state['discharging_rate_limit']:.0f}W")
-        
-        # Add SOC
-        parts.append(f"{system_state['battery_soc']:.0f}%")
+             battery_part += f" F:{forced_power_flow:.0f}W"
+             
+        parts.append(battery_part)
         
         # Add PV
         parts.append(f"PV:{system_state['solar_input']:.0f}W")

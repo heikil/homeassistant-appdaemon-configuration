@@ -496,14 +496,12 @@ class ChargingAdjustmentTool:
         change = abs(target_rate - current_rate)
         if change < self.config.minimum_charging_adjustment_watts:
             if not hasattr(self, 'last_small_change_log') or now - self.last_small_change_log > 300:
-                self.hass.log_if_enabled(f"Charging rate change too small ({change:.0f}W < {self.config.minimum_charging_adjustment_watts}W), skipping update")
                 self.last_small_change_log = now
             return False
             
         # If already at this rate, skip
         if current_rate == target_rate:
             if not hasattr(self, 'last_same_log') or now - self.last_same_log > 300:
-                self.hass.log_if_enabled(f"Charging rate already at {target_rate}W, no change needed")
                 self.last_same_log = now
             return False
             
@@ -611,13 +609,11 @@ class ExportLimitationTool:
         # Check if already at target
         if current_mode == "unlimited" and target_limit >= self.config.max_feed_grid_power:
             if not hasattr(self, 'last_same_log') or now - self.last_same_log > 300:
-                self.hass.log_if_enabled("Export limit already at maximum (unlimited), no change needed")
                 self.last_same_log = now
             return False
             
         if current_mode == "limited" and current_limit == target_limit:
             if not hasattr(self, 'last_same_log') or now - self.last_same_log > 300:
-                self.hass.log_if_enabled(f"Export limit already at {target_limit}W, no change needed")
                 self.last_same_log = now
             return False
             
@@ -626,7 +622,6 @@ class ExportLimitationTool:
             change = abs(target_limit - current_limit)
             if change < self.config.minimum_export_limit_change_watts:
                 if not hasattr(self, 'last_small_change_log') or now - self.last_small_change_log > 300:
-                    self.hass.log_if_enabled(f"Export limit change too small ({change:.0f}W < {self.config.minimum_export_limit_change_watts}W), skipping update")
                     self.last_small_change_log = now
                 return False
                 
@@ -774,7 +769,6 @@ class DischargeLimitationTool:
         # Check if change is significant enough
         change = abs(target_rate - current_limit)
         if change < self.config.minimum_charging_adjustment_watts:
-            self.hass.log_if_enabled(f"Discharge limit change too small ({change:.0f}W < {self.config.minimum_charging_adjustment_watts}W), skipping update")
             return False
             
         # Check cooldown

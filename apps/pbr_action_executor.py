@@ -55,10 +55,7 @@ class ActionExecutor:
         for action in actions:
             # Store for API visibility
             self.active_actions.append(action.description())
-
-            # Log the action description and reason
-            self.hass.log_if_enabled(f"{action.description()} (reason: {action.reason})")
-            
+       
             try:
                 # Get the tool instance
                 if action.tool not in self.tools:

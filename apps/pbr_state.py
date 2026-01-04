@@ -199,12 +199,12 @@ class StateEngine:
         if mode == 'buy':
             return (
                 EnergyFlow(battery_flow_change=-fixed_power, export_limit=None),
-                f"Buy mode: Charging battery at fixed power {fixed_power:.0f}W from grid (no phase balancing)"
+                ""
             )
         else:  # sell mode
             return (
                 EnergyFlow(battery_flow_change=fixed_power, export_limit=None),
-                f"Sell mode: Discharging battery at fixed power {fixed_power:.0f}W to grid (no phase balancing)"
+                ""
             )
     
     def _calculate_mfrr_mode(self, mode: str, system_state: dict) -> tuple[EnergyFlow, str]:

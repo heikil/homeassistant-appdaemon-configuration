@@ -274,7 +274,6 @@ class ModeManager:
             self.hass.log_if_enabled(f"No initial state defined for mode: {mode}", level="WARNING")
             return
 
-        self.hass.log_if_enabled(f"Applying initial state for {mode} mode:")
 
         # 1. Stop forced charging/discharging first
         if initial_state['forced_charge_discharge'] == 'stop':
@@ -289,7 +288,6 @@ class ModeManager:
         # 2. Set export limit
         if initial_state['export_limit'] == 'maximum' and 'export_limitation' in self.tools:
             self.tools['export_limitation'].reset_to_maximum(reason=f"Mode transition to {mode}")
-            self.hass.log_if_enabled(f"  - Export limit: maximum (unlimited)")
         # 'keep' means don't change
 
         # 3. Set charging limit
@@ -309,7 +307,6 @@ class ModeManager:
                 value=self.config.max_battery_power,
                 callback=service_call_callback
             )
-            self.hass.log_if_enabled(f"  - Discharge limit: maximum ({self.config.max_battery_power}W)")
         elif initial_state['discharge_limit'] == 'zero':
             self.hass.call_service(
                 "number/set_value",
@@ -317,13 +314,12 @@ class ModeManager:
                 value=0,
                 callback=service_call_callback
             )
-            self.hass.log_if_enabled(f"  - Discharge limit: zero (0W)")
         # 'keep' means don't change
 
         # TODO: Future - handle load switching during transitions
         # self._handle_load_switching(mode)
 
-        self.hass.log_if_enabled(f"Initial state applied for {mode} mode")
+        self.hass.log_if_enabled(f"Initial state for {mode}: export={initial_state['export_limit']}, charging={initial_state['charging_limit']}, discharge={initial_state['discharge_limit']}")
         
         # 5. Execute primary tool immediately for fixed-power and mFRR modes
         # This ensures buy/sell modes start charging/discharging without waiting for next cycle
