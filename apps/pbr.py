@@ -10,6 +10,7 @@ command execution logic.
 """
 
 import time
+import os
 import appdaemon.plugins.hass.hassapi as hass
 from typing import Dict, Any, Optional
 from pbr_config import Config
@@ -22,6 +23,7 @@ from loads_config import DEVICES
 from pbr_action_executor import ActionExecutor
 from pbr_actions import ChargingAdjustmentAction, DischargeLimitationAction, ForcedChargingAction, ForcedDischargingAction, ExportLimitationAction
 from pbr_fast_trigger import FastPhaseTrigger
+from pbr_history import PbrHistoryManager
 
 
 
@@ -53,6 +55,9 @@ class PhaseBalancerRewrite(hass.Hass):
 
         # Initialize data manager
         self.data_manager = DataManager(self)
+
+        # Initialize history manager
+        self.history_manager = PbrHistoryManager(os.path.dirname(__file__))
 
         # Initialize state engine
         self.state_engine = StateEngine(self.data_manager)
@@ -210,6 +215,9 @@ class PhaseBalancerRewrite(hass.Hass):
         if current_mode:
             self.log_if_enabled(f"System initialized in mode: {current_mode}")
 
+        # Register API endpoints
+        self.register_endpoint(self._api_pbr, "pbr")
+
     def on_config_update(self, entity, attribute, old, new, kwargs):
         """Handle configuration or mode changes (not power sensors)"""
         sensor_name = entity.split('.')[-1]
@@ -227,6 +235,8 @@ class PhaseBalancerRewrite(hass.Hass):
         # Log other config changes
         self.log_if_enabled(f"Config updated: {sensor_name} = {old} → {new}")
         
+        self.history_manager.add_event("config_change", f"{entity} changed to {new}", {"old": old, "new": new})
+        
         # If mode/source changed, may need to trigger mode transition
         if entity in [self.config.qw_mode_sensor, self.config.qw_source_sensor]:
             self.log_if_enabled(f"Mode/source change detected, will re-evaluate on next control loop")
@@ -240,6 +250,7 @@ class PhaseBalancerRewrite(hass.Hass):
         # Apply normal mode initial state for consistency
         self.mode_manager._apply_mode_initial_state('normal')
 
+        self.history_manager.add_event("reset", "Resetting to safe state")
         self.log("Safe state reset complete - restored normal mode initial state")
 
     def log_system_state(self, kwargs=None):
@@ -283,6 +294,14 @@ class PhaseBalancerRewrite(hass.Hass):
 
         # Call actual control loop
         self.calculate_and_log_desired_state()
+
+        # Add snapshot to history if we have a valid state
+        system_state = self.get_current_system_state()
+        if system_state:
+            # Enrich state with mode for history
+            snapshot_state = system_state.copy()
+            snapshot_state['mode'] = self.mode_manager.current_mode if self.mode_manager else "startup"
+            self.history_manager.add_snapshot(snapshot_state)
 
     def calculate_and_log_desired_state(self, kwargs=None):
         """Calculate desired state and log proposed actions.
@@ -493,7 +512,8 @@ class PhaseBalancerRewrite(hass.Hass):
                 )
                 self.action_executor.execute_actions([protection_action], mode)
             else:
-                self.log_if_enabled(f"HEATING PROTECTION: {load_name} ON - discharge already blocked (mode={mode}, charging allowed)")
+                # self.log_if_enabled(f"HEATING PROTECTION: {load_name} ON - discharge already blocked (mode={mode}, charging allowed)")
+                pass
             
             # Stop forced discharge if active (it shouldn't be running during heating protection)
             current_forced_flow = system_state.get('forced_power_flow', 0)
@@ -614,7 +634,7 @@ class PhaseBalancerRewrite(hass.Hass):
                         actions.append(action['action'])
                         self.log_if_enabled(f"DEBUG discharge_limitation: action={action['action'].description()}, remaining={action.get('remaining', battery_flow_change):.1f}W", level="DEBUG")
                     # CRITICAL: In FRRDOWN, need to convert 'remaining' back to negated form
-                    battery_flow_change = remaining_from_tool
+                    battery_flow_change = action.get('remaining', battery_flow_change)
                 else:
                     self.log_if_enabled(f"DEBUG discharge_limitation: returned None", level="DEBUG")
 
@@ -1005,7 +1025,11 @@ class PhaseBalancerRewrite(hass.Hass):
             parts.append(f"d:{energy_flow.battery_flow_change:.0f}W")
         
         # Join and log
-        self.log_if_enabled(" | ".join(parts) + f" -> {desired_state.reasoning}")
+        # Join and log
+        log_line = " | ".join(parts)
+        if desired_state.reasoning:
+            log_line += f" -> {desired_state.reasoning}"
+        self.log_if_enabled(log_line)
 
     def log_proposed_actions(self, actions, mode):
         """Log the proposed tool actions in read-only mode"""
@@ -1094,3 +1118,36 @@ class PhaseBalancerRewrite(hass.Hass):
             self.log("PBR Logging enabled")
         else:
             self.log("PBR Logging disabled")
+
+    def _api_pbr(self, data, **kwargs):
+        """API endpoint for PBR data"""
+        try:
+            # Get history (defaults to 24h)
+            history = self.history_manager.get_history(hours=24)
+            
+            # Get current status
+            current_state = self.get_current_system_state() or {}
+            
+            status = {
+                "mode": self.mode_manager.current_mode if self.mode_manager else "startup",
+                "active_actions": self.action_executor.active_actions if hasattr(self, 'action_executor') else [],
+                "heating_active": current_state.get("heating_active", False),
+                "heating_requested": current_state.get("heating_requested", False),
+                "l1": current_state.get("l1_current", 0),
+                "l2": current_state.get("l2_current", 0),
+                "l3": current_state.get("l3_current", 0),
+                "soc": current_state.get("battery_soc", 0),
+                "pv_power": current_state.get("pv_power", 0),
+                "load_power": current_state.get("house_load", 0),
+                "grid_power": current_state.get("grid_power", 0),
+                "battery_power": current_state.get("battery_power", 0)
+            }
+            
+            return {
+                "status": status,
+                "history": history
+            }, 200
+            
+        except Exception as e:
+            self.log(f"PBR API Error: {e}", level="ERROR")
+            return {"error": str(e)}, 500

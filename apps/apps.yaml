@@ -1,4 +1,4 @@
-phase_balancer_rewrite:
+pb:
   module: pbr
   class: PhaseBalancerRewrite
   disable: false
@@ -15,3 +15,5 @@ load_scheduler:
   class: LoadSchedulingApp
   latitude: !secret latitude
   longitude: !secret longitude
+
+

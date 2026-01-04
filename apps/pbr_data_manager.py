@@ -402,7 +402,19 @@ class DataManager:
                 'forced_power_flow': self._get_current_forced_power_flow(),
                 'heating_active': self.get_sensor_value(Config.heating_switch, use_fallback=True) == "on",
                 'boiler_active': self.get_sensor_value(Config.boiler_switch, use_fallback=True) == "on",
-                'timestamp': time.time()
+                'heating_active': self.get_sensor_value(Config.heating_switch, use_fallback=True) == "on",
+                'boiler_active': self.get_sensor_value(Config.boiler_switch, use_fallback=True) == "on",
+                'timestamp': time.time(),
+                
+                # Aliases and Derived Values for API/Dashboard
+                'grid_power': self.get_sensor_value(Config.power_meter_total_sensor),
+                'pv_power': self.get_sensor_value(Config.inverter_input_sensor),
+                'house_load': (self.get_sensor_value(Config.inverter_power_sensor) or 0) - (self.get_sensor_value(Config.power_meter_total_sensor) or 0),
+                
+                # Phase Power (mapped to l1/l2/l3 for dashboard compatibility)
+                'l1_current': numeric_phases[0] if len(numeric_phases) > 0 else 0,
+                'l2_current': numeric_phases[1] if len(numeric_phases) > 1 else 0,
+                'l3_current': numeric_phases[2] if len(numeric_phases) > 2 else 0
             }
 
             return system_state

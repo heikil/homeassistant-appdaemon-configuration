@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Energy Command Center</title>
+
+    <!-- Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue-apexcharts"></script>
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            850: '#1f2937',
+                            900: '#111827',
+                            950: '#0B0F19',
+                        },
+                        accent: {
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="dashboard.css">
+
+    <!-- Vue App (ES Module) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-950 text-gray-200 font-sans h-screen overflow-hidden selection:bg-accent-500 selection:text-white">
+
+    <div id="app" class="h-full flex flex-col">
+        <!-- Header -->
+        <header class="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center shadow-lg z-10">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                    ⚡
+                </div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-400">
+                    Energy Command Center
+                </h1>
+            </div>
+
+            <div class="flex items-center gap-6 text-sm">
+                <!-- Refresh Button -->
+                <button @click="refresh"
+                    class="p-2 rounded-full hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
+                    title="Refresh Data">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                        <path d="M3 3v5h5" />
+                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                        <path d="M16 21h5v-5" />
+                    </svg>
+                </button>
+
+                <!-- Status Indicators -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-800/50 border border-gray-700/50">
+                    <div class="w-2 h-2 rounded-full animate-pulse" :class="connectionStatusColor"></div>
+                    <span :class="connectionStatusTextClass">{{ connectionStatus }}</span>
+                </div>
+
+                <div class="text-gray-400 font-mono text-xs">
+                    {{ currentTime }}
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <main class="flex-1 flex overflow-hidden">
+
+            <!-- Left: System & PBR (Real-time) -->
+            <section
+                class="w-[450px] flex-none bg-gray-900/50 border-r border-gray-800 flex flex-col overflow-y-auto p-6 gap-6">
+
+                <!-- System Mode Card -->
+                <div class="card p-5 relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i class="text-6xl">⚙️</i>
+                    </div>
+                    <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-2">System Mode</h2>
+                    <div class="text-3xl font-black text-white mb-2" :class="modeColorClass">
+                        {{ pbr.mode || 'STARTUP' }}
+                    </div>
+                    <div class="flex gap-2 text-xs">
+                        <span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700">Source:
+                            Auto</span>
+                        <span v-if="pbr.heating_active"
+                            class="px-2 py-0.5 rounded bg-orange-900/30 text-orange-400 border border-orange-800/50 animate-pulse">
+                            Heating Active
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Power Flow (Simplified Visual) -->
+                <div class="card p-5">
+                    <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-4">Power Flow</h2>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <!-- Grid -->
+                        <div class="flex flex-col items-center gap-1">
+                            <div
+                                class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700 text-xl">
+                                🏭
+                            </div>
+                            <span class="text-xs text-gray-500">Grid</span>
+                            <span class="font-bold font-mono"
+                                :class="pbr.grid_power > 0 ? 'text-red-400' : 'text-green-400'">
+                                {{ formatPower(pbr.grid_power) }}
+                            </span>
+                        </div>
+
+                        <!-- House -->
+                        <div class="flex flex-col items-center gap-1 scale-110">
+                            <div
+                                class="w-12 h-12 rounded-full bg-blue-900/20 flex items-center justify-center border border-blue-500/30 text-2xl shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                                🏠
+                            </div>
+                            <span class="text-xs text-blue-400 font-bold">Load</span>
+                            <span class="font-bold font-mono text-white">
+                                {{ formatPower(pbr.load_power) }}
+                            </span>
+                        </div>
+
+                        <!-- Battery -->
+                        <div class="flex flex-col items-center gap-1">
+                            <div
+                                class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700 text-xl relative">
+                                🔋
+                                <div
+                                    class="absolute -top-6 -right-8 bg-gray-900 text-[10px] font-bold px-1.5 rounded-full border border-gray-700 z-10">
+                                    {{ pbr.soc }}%
+                                </div>
+                            </div>
+                            <span class="text-xs text-gray-500">Battery</span>
+                            <span class="font-bold font-mono"
+                                :class="pbr.battery_power > 0 ? 'text-green-400' : 'text-orange-400'">
+                                {{ formatPower(pbr.battery_power) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Phase Gauges -->
+                <div class="card p-5">
+                    <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-4">Phase Balance</h2>
+                    <div class="space-y-4">
+                        <phase-bar label="L1" :current="pbr.l1" color="text-yellow-400"
+                            bar-color="bg-yellow-500"></phase-bar>
+                        <phase-bar label="L2" :current="pbr.l2" color="text-cyan-400"
+                            bar-color="bg-cyan-500"></phase-bar>
+                        <phase-bar label="L3" :current="pbr.l3" color="text-purple-400"
+                            bar-color="bg-purple-500"></phase-bar>
+                    </div>
+                </div>
+
+                <!-- Recent Actions Log -->
+                <div class="flex-1 min-h-[200px] card flex flex-col overflow-hidden">
+                    <div class="p-4 border-b border-gray-800 bg-gray-850/50">
+                        <h2 class="text-gray-400 text-xs font-bold uppercase tracking-wider">Activity Log</h2>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-0 font-mono text-xs">
+                        <div v-for="(log, i) in recentLogs" :key="i"
+                            class="px-4 py-2 border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                            <span class="text-gray-500 mr-2">{{ log.time }}</span>
+                            <span :class="log.color">{{ log.message }}</span>
+                        </div>
+                        <div v-if="recentLogs.length === 0" class="p-4 text-center text-gray-600 italic">
+                            No recent activity
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- Right: Load Scheduler & History -->
+            <section class="flex-1 flex flex-col bg-gray-950 p-6 overflow-hidden gap-6">
+
+                <!-- Tabs -->
+                <div class="flex gap-4 border-b border-gray-800 pb-1">
+                    <button @click="activeTab = 'schedule'"
+                        :class="['tab-btn', activeTab === 'schedule' ? 'active' : '']">
+                        SCHEDULE
+                    </button>
+                    <button @click="activeTab = 'history'"
+                        :class="['tab-btn', activeTab === 'history' ? 'active' : '']">
+                        HISTORY <span class="text-xs bg-gray-800 px-1.5 rounded ml-1 text-gray-500">24h</span>
+                    </button>
+                </div>
+
+                <!-- View: Schedule -->
+                <div v-if="activeTab === 'schedule'"
+                    class="flex-1 flex flex-col overflow-y-auto pr-2 gap-6 animate-fade-in">
+
+                    <!-- Stats Bar -->
+                    <div class="grid grid-cols-5 gap-4">
+                        <div class="stat-box">
+                            <div class="label">Price (Avg)</div>
+                            <div class="value">{{ loadsStats.avgPrice }} <span class="unit">c/kWh</span></div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">Lowest</div>
+                            <div class="value text-green-400">{{ loadsStats.minPrice }} <span class="unit">c/kWh</span>
+                            </div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">Scheduled</div>
+                            <div class="value">{{ loadsStats.totalHours }} <span class="unit">hrs</span></div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">Package</div>
+                            <div class="value text-gray-400">{{ loadsStats.package }}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">Weather</div>
+                            <div class="value text-blue-400">
+                                {{ loadsStats.weather ? loadsStats.weather.toFixed(1) : '--' }} <span
+                                    class="unit">°C</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Timeline Chart -->
+                    <div class="card p-4 min-h-[350px]">
+                        <div id="schedule-chart" class="w-full h-full"></div>
+                    </div>
+
+                    <div class="text-center text-gray-500 text-xs">
+                        Schedule calculated at: <span id="calculated-at">--</span>
+                    </div>
+
+                    <!-- Devices Grid -->
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div v-for="device in loads.devices" :key="device.name" class="card p-4 flex flex-col gap-3">
+                            <div class="flex justify-between items-start">
+                                <h3 class="font-bold flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full shadow-[0_0_8px_currentColor]"
+                                        :class="device.currently_active ? 'bg-green-500 text-green-500' : 'bg-gray-600 text-gray-600'">
+                                    </div>
+                                    {{ device.name }}
+                                </h3>
+                                <div
+                                    class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 uppercase font-bold tracking-wider">
+                                    {{ device.mode }}
+                                </div>
+                            </div>
+
+                            <!-- Timeline Strip -->
+                            <div class="h-2 w-full bg-gray-800 rounded-full overflow-hidden flex">
+                                <div v-for="(slot, idx) in device.slots" :key="idx"
+                                    class="flex-1 h-full border-r border-gray-900/10"
+                                    :class="slot ? 'bg-blue-500' : 'bg-transparent'">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 text-xs text-gray-500 mt-1">
+                                <div>Total: <span class="text-gray-300 font-mono">{{ device.total_hours }}h</span></div>
+                                <div class="text-right" v-if="device.energy_debt > 0">
+                                    Debt: <span class="text-orange-400 font-bold">{{ device.energy_debt }}m</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- View: History -->
+                <div v-if="activeTab === 'history'"
+                    class="flex-1 flex flex-col overflow-y-auto pr-2 gap-6 animate-fade-in">
+                    <!-- History Chart -->
+                    <div class="card p-4 min-h-[500px] flex flex-col">
+                        <h3 class="text-sm font-bold text-gray-400 uppercase mb-4">System Power History (24h)</h3>
+                        <div id="history-chart" class="flex-1 w-full"></div>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <!-- Application Script -->
+    <script type="module" src="dashboard.js"></script>
+</body>
+
+</html>

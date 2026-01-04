@@ -12,6 +12,7 @@ from datetime import time, datetime, timedelta
 import pytz
 import json
 import os
+from collections import deque
 
 from loads_config import GLOBAL_CONFIG, DEVICES, ScheduleMode
 from loads_prices import LoadsPriceManager
@@ -58,6 +59,9 @@ class LoadSchedulingApp(hass.Hass):
                 price_manager=self.price_manager,
                 logger=self.log
             )
+            
+            # History of last 20 recoveries
+            self.recent_recoveries = deque(maxlen=20)
             
             # Schedule daily calculation using robust timezone handling
             self._schedule_next_run()
@@ -391,12 +395,14 @@ class LoadSchedulingApp(hass.Hass):
                     'always_on_price': device.always_on_price,
                     'weather_adjustment': device.weather_adjustment,
                     'currently_active': sum(device.scheduled_slots) > 0,
-                    'weather_info': f"{getattr(self.scheduler, 'avg_temp', 'N/A')}°C" if hasattr(self, 'scheduler') else None
+                    'weather_info': f"{getattr(self.scheduler, 'avg_temp', 'N/A')}°C" if hasattr(self, 'scheduler') else None,
+                    'energy_debt': getattr(device, 'energy_debt', 0)
                 }
                 for device in DEVICES
             ],
             'weather': getattr(self.scheduler, 'avg_temp', None) if hasattr(self, 'scheduler') else None,
-            'package': GLOBAL_CONFIG.electricity_package.upper()
+            'package': GLOBAL_CONFIG.electricity_package.upper(),
+            'recent_recoveries': list(getattr(self, 'recent_recoveries', []))
         }
 
     def _dashboard_api(self, data, **kwargs):
@@ -418,7 +424,7 @@ class LoadSchedulingApp(hass.Hass):
                     try:
                         with open(file_path, 'r') as f:
                             disk_data = json.load(f)
-                            self.log("Serving API data from disk persistence")
+                            # self.log("Serving API data from disk persistence")
                             return disk_data, 200
                     except Exception as e:
                         self.log(f"Failed to read persistence file: {e}", level="WARNING")
@@ -543,6 +549,15 @@ class LoadSchedulingApp(hass.Hass):
         if current_slot_idx in best_indices:
             self.log(f"{device.name}: Recovery triggered! Debt={device.energy_debt}m")
             self.call_service("homeassistant/turn_on", entity_id=device.entity_id)
+            
+            # Log to history
+            if hasattr(self, 'recent_recoveries'):
+                self.recent_recoveries.append({
+                    'timestamp': now.isoformat(),
+                    'device': device.name,
+                    'debt_burned': 15, # Approx
+                    'price': self.scheduler.price_slots[current_slot_idx].total_price * 100
+                })
 
     def _update_device_sensor_debt(self, device):
         """Update sensor with debt attribute"""

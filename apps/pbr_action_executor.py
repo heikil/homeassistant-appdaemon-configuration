@@ -39,6 +39,7 @@ class ActionExecutor:
         """
         self.hass = hass_instance
         self.tools = tools
+        self.active_actions = []
         
     def execute_actions(self, actions: List[Action], mode: str) -> None:
         """
@@ -48,7 +49,13 @@ class ActionExecutor:
             actions: List of strongly-typed action objects
             mode: Current operating mode (for logging context)
         """
+        # Reset active actions for this cycle
+        self.active_actions = []
+
         for action in actions:
+            # Store for API visibility
+            self.active_actions.append(action.description())
+
             # Log the action description and reason
             self.hass.log_if_enabled(f"{action.description()} (reason: {action.reason})")
             

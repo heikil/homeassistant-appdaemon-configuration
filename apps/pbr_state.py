@@ -101,7 +101,8 @@ class StateEngine:
                 reasoning = f"Battery SOC too low ({system_state['battery_soc']:.0f}% < {Config.battery_soc_minimum_for_discharging:.0f}%): discharge blocked."
             else:
                 # Allow charging (negative flow)
-                reasoning += f" (Battery SOC {system_state['battery_soc']:.0f}% - charging allowed)"
+                if reasoning:
+                    reasoning += f" (Battery SOC {system_state['battery_soc']:.0f}% - charging allowed)"
         
         # Apply load protection constraints - ONLY block discharge, allow charging
         # EXEMPT mFRR modes - they are grid regulation services that must always work
@@ -109,9 +110,11 @@ class StateEngine:
             # Block discharge (positive flow_change) but allow charging (negative flow_change)
             if energy_flow.battery_flow_change > 0:
                 energy_flow.battery_flow_change = 0
-                reasoning += " Load protection active: battery discharge blocked."
+                if reasoning:
+                    reasoning += " Load protection active: battery discharge blocked."
             else:
-                reasoning += " Load protection active: battery discharge blocked (charging allowed)."
+                if reasoning:
+                    reasoning += " Load protection active: battery discharge blocked (charging allowed)."
         
         return DesiredState(
             target_phase=target_phase,
@@ -236,19 +239,13 @@ class StateEngine:
             grid_flow_adjustment = 0
         
         if mode == 'frrup':
-            reasoning = f"mFRR UP mode: Target grid {target_grid_flow:.0f}W, current {current_grid_flow:.0f}W, need {grid_flow_adjustment:.0f}W adjustment"
-            # Note: Physical limits may prevent achieving target
-            if grid_flow_adjustment != 0:
-                reasoning += " (best effort - battery/charge limits may prevent full achievement)"
+            reasoning = f"mFRR UP: T {target_grid_flow:.0f}W, C {current_grid_flow:.0f}W, D {grid_flow_adjustment:.0f}W"
             return (
                 EnergyFlow(battery_flow_change=-grid_flow_adjustment, export_limit=None),
                 reasoning
             )
         else:  # frrdown mode
-            reasoning = f"mFRR DOWN mode: Target grid {target_grid_flow:.0f}W, current {current_grid_flow:.0f}W, need {grid_flow_adjustment:.0f}W adjustment"
-            # Note: Physical limits may prevent achieving target
-            if grid_flow_adjustment != 0:
-                reasoning += " (best effort - battery/discharge limits may prevent full achievement)"
+            reasoning = f"mFRR DOWN: T {target_grid_flow:.0f}W, C {current_grid_flow:.0f}W, D {grid_flow_adjustment:.0f}W"
             return (
                 EnergyFlow(battery_flow_change=-grid_flow_adjustment, export_limit=None),
                 reasoning
@@ -258,7 +255,7 @@ class StateEngine:
         """Calculate energy flow for conservative modes (nobattery/savebattery)"""
         return (
             EnergyFlow(battery_flow_change=0, export_limit=None),
-            f"Conservative mode ({mode}): No battery discharge allowed. Phases may be negative."
+            ""
         )
     
     def _calculate_pvsell_mode(self, net_power_adjustment: float) -> tuple[EnergyFlow, str]:

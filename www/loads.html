@@ -255,27 +255,33 @@
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Minimum</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-min">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-min">--</span>
                 </div>
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Maximum</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-max">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-max">--</span>
                 </div>
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Average</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-avg">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-avg">--</span>
                 </div>
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Median</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-median">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-median">--</span>
                 </div>
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Cheap6h</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-cheap6h">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-cheap6h">--</span>
                 </div>
                 <div class="info-row" style="border-bottom: 1px solid #21262d; padding: 10px 0;">
                     <span class="info-label" style="font-size: 0.75em; flex-shrink: 1;">Volatility</span>
-                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;" id="stat-volatility">--</span>
+                    <span class="info-value" style="flex-grow: 1; text-align: right; white-space: nowrap;"
+                        id="stat-volatility">--</span>
                 </div>
             </div>
         </div>
@@ -289,7 +295,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'https://your_appdaemon_address:port/api/appdaemon/load_scheduler_data';
+        const API_ENDPOINT = 'https://haosad.kants.eu/api/appdaemon/load_scheduler_data';
         let chart = null;
 
         async function fetchScheduleData() {
@@ -328,7 +334,7 @@
             // Update calculation time
             if (data.calculated_at) {
                 const date = new Date(data.calculated_at);
-                document.getElementById('calculated-at').textContent = date.toLocaleString('et-EE', { 
+                document.getElementById('calculated-at').textContent = date.toLocaleString('et-EE', {
                     timeZone: 'Europe/Tallinn',
                     year: 'numeric',
                     month: '2-digit',
