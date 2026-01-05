@@ -11,6 +11,7 @@ command execution logic.
 
 import time
 import os
+import json
 import appdaemon.plugins.hass.hassapi as hass
 from typing import Dict, Any, Optional
 from pbr_config import Config
@@ -1010,26 +1011,72 @@ class PhaseBalancerRewrite(hass.Hass):
         # Add PV
         parts.append(f"PV:{system_state['solar_input']:.0f}W")
         
-        # Add loads if active
-        heating = system_state.get('heating_active')
-        boiler = system_state.get('boiler_active')
-        if heating or boiler:
-            load_parts = []
-            if heating:
-                load_parts.append("H")
-            if boiler:
-                load_parts.append("B")
+        # Add loads if active or if debt exists
+        heating_active = system_state.get('heating_active')
+        boiler_active = system_state.get('boiler_active')
+        
+        load_parts = []
+        
+        
+        # Heating
+        # Always check debt for heating from JSON (Source of Truth)
+        heating_label = ""
+        try:
+            loads_data = self._read_loads_data()
+            # Hardcoded matching for "Heating Big" - this should ideally be configurable if names change
+            # But since we are moving away from sensor attributes, we need to look up by Name
+            heating_device = loads_data.get("Heating Big") 
+            
+            if heating_device:
+                 debt = heating_device.get('energy_debt', 0)
+                 if debt > 0:
+                     # Format minutes
+                     if debt >= 60:
+                         h = debt // 60
+                         m = debt % 60
+                         debt_str = f"{h}h{m}m"
+                     else:
+                         debt_str = f"{debt}m"
+                     
+                     if heating_active:
+                         heating_label = f"H({debt_str})"
+                     else:
+                         heating_label = f"h({debt_str})"
+                 elif heating_active:
+                     heating_label = "H"
+            elif heating_active:
+                heating_label = "H"
+        except Exception:
+            if heating_active:
+                heating_label = "H"
+        
+        if heating_label:
+            load_parts.append(heating_label)
+
+        # Boiler
+        if boiler_active:
+            load_parts.append("B")
+
+        if load_parts:
             parts.append(f"L:{'+'.join(load_parts)}")
         
-        # Add flow change if non-zero
+        # Add flow change/target if non-zero
         if energy_flow.battery_flow_change != 0:
-            parts.append(f"d:{energy_flow.battery_flow_change:.0f}W")
+            if mode in ['buy', 'sell']:
+                # For fixed power modes, show as Target (t) with positive = charging
+                target = -energy_flow.battery_flow_change
+                parts.append(f"t:{target:.0f}W")
+            else:
+                # For regulation/normal modes, show as Delta (d) with negative = charging (grid perspective)
+                parts.append(f"d:{energy_flow.battery_flow_change:.0f}W")
         
+        # Join and log
         # Join and log
         # Join and log
         log_line = " | ".join(parts)
-        if desired_state.reasoning:
-            log_line += f" -> {desired_state.reasoning}"
+        # Reasoning text removed as per user request
+        # if desired_state.reasoning:
+        #    log_line += f" -> {desired_state.reasoning}"
         self.log_if_enabled(log_line)
 
     def log_proposed_actions(self, actions, mode):
@@ -1152,3 +1199,37 @@ class PhaseBalancerRewrite(hass.Hass):
         except Exception as e:
             self.log(f"PBR API Error: {e}", level="ERROR")
             return {"error": str(e)}, 500
+
+    def _read_loads_data(self) -> Dict[str, Any]:
+        """Read loads data from JSON file with mtime caching"""
+        try:
+            if not hasattr(self, '_loads_data_cache'):
+                self._loads_data_cache = {'mtime': 0, 'data': {}}
+                
+            file_path = self.config.loads_data_file
+            if not os.path.exists(file_path):
+                return {}
+                
+            mtime = os.path.getmtime(file_path)
+            if mtime > self._loads_data_cache['mtime']:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                    
+                # Create dict of name -> clean data
+                clean_data = {}
+                if 'devices' in data:
+                    for device in data['devices']:
+                        name = device.get('name')
+                        if name:
+                            clean_data[name] = device
+                            
+                self._loads_data_cache = {
+                    'mtime': mtime,
+                    'data': clean_data
+                }
+                
+            return self._loads_data_cache['data']
+            
+        except Exception as e:
+            # self.log(f"Error reading loads data: {e}", level="WARNING")
+            return {}

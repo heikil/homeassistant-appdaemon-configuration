@@ -437,6 +437,49 @@ class LoadSchedulingApp(hass.Hass):
             self.log(f"Traceback: {traceback.format_exc()}", level="ERROR")
             return {'error': str(e)}, 500
     
+    def _load_persistence_data(self):
+        """Load persistent data (energy debt) from disk"""
+        try:
+            file_path = os.path.join(os.path.dirname(__file__), self.PERSISTENCE_FILE)
+            data = {'devices': []}
+            
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    try:
+                        data = json.load(f)
+                    except json.JSONDecodeError:
+                        self.log("Error decoding persistence file, starting with empty data", level="WARNING")
+            else:
+                 self.log("No persistence file found, starting with 0 debt")
+
+            # Create a map of loaded debts for easier lookup
+            loaded_debts = {}
+            if 'devices' in data:
+                for device_data in data['devices']:
+                    name = device_data.get('name')
+                    debt = device_data.get('energy_debt', 0)
+                    if name:
+                        loaded_debts[name] = debt
+
+            loaded_count = 0
+            # Iterate ALL defined devices to ensure sync (even if debt is 0)
+            for device in DEVICES:
+                debt = loaded_debts.get(device.name, 0)
+                device.energy_debt = debt
+                
+                # ALWAYS update sensor on startup to clear any stale state ("Ghost Debt")
+                self._update_device_sensor_debt(device)
+                
+                if debt > 0:
+                    self.log(f"Restored energy debt for {device.name}: {debt} min")
+                    loaded_count += 1
+            
+            if loaded_count > 0:
+                self.log(f"Restored debt for {loaded_count} devices from persistence")
+                
+        except Exception as e:
+            self.log(f"Error loading persistence data: {e}", level="WARNING")
+
     def terminate(self):
         """Cleanup on termination"""
         self.log("Load Scheduling Application terminating")
@@ -502,11 +545,16 @@ class LoadSchedulingApp(hass.Hass):
 
     def _attempt_recovery(self, device, current_slot_idx, now):
         """Attempt to recover energy debt"""
+        # Postpone recovery if system is in mFRR mode (silently)
+        qw_mode = self.get_state("sensor.qw_mode")
+        if qw_mode in ["frrup", "frrdown"]:
+            # self.log(f"Postponing recovery due to active mFRR mode ({qw_mode})")
+            return
+
         # Look ahead recovery_window_hours
         slots_to_check = device.recovery_window_hours * 4
         
         candidates = []
-        
         for i in range(slots_to_check):
             idx = current_slot_idx + i
             if idx >= 96:
@@ -544,6 +592,10 @@ class LoadSchedulingApp(hass.Hass):
         # Take top N cheapest
         best_slots = candidates[:slots_needed]
         best_indices = [c['idx'] for c in best_slots]
+
+        # Debug selection
+        self.log(f"DEBUG RECOVERY {device.name}: Need {slots_needed} slots. Best candidates: {[{'idx': c['idx'], 'price': c['price']} for c in best_slots]}")
+        self.log(f"DEBUG RECOVERY {device.name}: Current slot {current_slot_idx} in best? {current_slot_idx in best_indices}")
         
         # Is CURRENT slot one of the best?
         if current_slot_idx in best_indices:

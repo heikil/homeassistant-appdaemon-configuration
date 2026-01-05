@@ -73,6 +73,7 @@ class Config:
     qw_powerlimit_sensor: ClassVar[str] = "sensor.qw_powerlimit"
     qw_peakshaving_sensor: ClassVar[str] = "sensor.qw_peakshaving"
     heating_switch: ClassVar[str] = "switch.heating"
+    heating_schedule_sensor: ClassVar[str] = "sensor.load_schedule_heating_big"  # For debt tracking
     boiler_switch: ClassVar[str] = "switch.boiler"
     phase_target_input: ClassVar[str] = "input_number.phase_balancer_phase_target"
     phase_range_low_input: ClassVar[str] = "input_number.phase_balancer_range_low"
@@ -105,9 +106,13 @@ class Config:
 
         # Boolean sensors (on/off switches)
         heating_switch: 'boolean',
+        heating_schedule_sensor: 'numeric', # Has attributes we need
         boiler_switch: 'boolean',
     }
-
+    
+    # Path to loads data file (source of truth for debt)
+    loads_data_file: ClassVar[str] = "/data/appdaemon/conf/apps/loads_api_data.json"
+    
     # Sensor entities to monitor (list for iteration)
     sensor_entities: ClassVar[List[str]] = [
         # Phase power sensors
@@ -136,6 +141,7 @@ class Config:
 
         # Load sensors
         heating_switch,
+        heating_schedule_sensor,
         boiler_switch,
 
         # Phase balancer configuration inputs
