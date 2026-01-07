@@ -509,6 +509,8 @@ class LoadSchedulingApp(hass.Hass):
         if not (0 <= current_slot_idx < 96):
             return
 
+        debt_changed = False
+
         for device in DEVICES:
             if not device.scheduling_enabled:
                 continue
@@ -522,9 +524,14 @@ class LoadSchedulingApp(hass.Hass):
             
             if is_scheduled_on and not is_actual_on:
                 # Accumulate debt (1 minute)
+                old_debt = device.energy_debt
                 device.energy_debt += 1
                 if device.energy_debt > device.max_energy_debt:
                     device.energy_debt = device.max_energy_debt
+                
+                if device.energy_debt != old_debt:
+                    debt_changed = True
+
                 # Log occasionally
                 if device.energy_debt % 15 == 0:
                     self.log(f"{device.name}: Energy debt increased to {device.energy_debt} min")
@@ -533,6 +540,7 @@ class LoadSchedulingApp(hass.Hass):
                 # Payback debt
                 if device.energy_debt > 0:
                     device.energy_debt -= 1
+                    debt_changed = True
                     if device.energy_debt == 0:
                         self.log(f"{device.name}: Energy debt fully repaid")
             
@@ -542,6 +550,10 @@ class LoadSchedulingApp(hass.Hass):
                 
             # Update sensor with debt info
             self._update_device_sensor_debt(device)
+
+        # Save to disk if debt changed, so PBR sees it immediately
+        if debt_changed:
+            self._save_api_data_to_disk()
 
     def _attempt_recovery(self, device, current_slot_idx, now):
         """Attempt to recover energy debt"""

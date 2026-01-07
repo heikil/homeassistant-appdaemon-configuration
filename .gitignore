@@ -134,3 +134,4 @@ appdaemon.yaml
 apps/loads_api_data.json
 docs/
 apps/pbr_events.json
+access.log*

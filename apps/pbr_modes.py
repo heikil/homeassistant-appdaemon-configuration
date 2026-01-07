@@ -97,7 +97,7 @@ class ModeManager:
         'buy': ['forced_charging'],  # Direct forced charge at qw_powerlimit - no phase balancing
         'sell': ['forced_discharging'],  # Direct forced discharge at qw_powerlimit - no phase balancing
         'frrup': ['load_switching', 'charging_adjustment', 'forced_discharging'],  # mFRR UP: Reduce charging first (free PV to grid), then discharge battery if needed
-        'frrdown': ['load_switching', 'discharge_limitation', 'charging_adjustment', 'forced_charging']  # mFRR DOWN: Limit discharge to force grid import, increase charging from grid
+        'frrdown': ['discharge_limitation', 'charging_adjustment', 'forced_charging', 'load_switching']  # mFRR DOWN: First use battery (stop discharge, charge), then switch on loads if needed
     }
 
     # QW mode mappings are now in pbr_config.py (moved for better separation of data vs logic)

@@ -643,9 +643,12 @@ class PhaseBalancerRewrite(hass.Hass):
             elif tool_name == 'load_switching':
                 # For FRRDOWN, load_switching needs the original positive value (positive = need more import)
                 # For FRRUP, load_switching needs negative value (negative = need more export)
-                # NOTE: battery_flow_change is already negated for frrdown in the main loop!
-                # So we simply pass battery_flow_change directly.
-                flow_for_switching = battery_flow_change
+                # NOTE: battery_flow_change was negated for frrdown at line 585, so we must UN-NEGATE it
+                # to restore the original sign convention expected by LoadSwitchingTool.
+                if mode == 'frrdown':
+                    flow_for_switching = -battery_flow_change  # Un-negate to get original positive value
+                else:
+                    flow_for_switching = battery_flow_change
                 
                 # Calculate available battery capacity to handle overshoot
                 # Charge capacity: How much MORE can we charge? (Limit - Current)
