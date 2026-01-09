@@ -668,6 +668,7 @@ class PhaseBalancerRewrite(hass.Hass):
                     mode, 
                     available_charge_capacity=available_charge_capacity,
                     available_discharge_capacity=available_discharge_capacity,
+                    available_charge_reduction=max(0, current_power),  # How much battery can REDUCE charging
                     reason=f"Load switching for {mode}"
                 )
                 

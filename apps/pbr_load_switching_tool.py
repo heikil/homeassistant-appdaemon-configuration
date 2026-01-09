@@ -16,7 +16,7 @@ class LoadSwitchingTool:
         self.devices = devices
         self.log = hass.log
     
-    def get_proposed_action(self, power_needed: float, mode: str, reason: str, available_charge_capacity: float = 0, available_discharge_capacity: float = 0) -> Dict:
+    def get_proposed_action(self, power_needed: float, mode: str, reason: str, available_charge_capacity: float = 0, available_discharge_capacity: float = 0, available_charge_reduction: float = 0) -> Dict:
         """
         Calculate proposed load switching action
         
@@ -24,8 +24,9 @@ class LoadSwitchingTool:
             power_needed: Power to adjust (negative = need more export, positive = need more import)
             mode: 'frrup' or 'frrdown'
             reason: Logging explanation
-            available_charge_capacity: Battery capacity to absorb overshoot when reducing consumption (turning off loads)
-            available_discharge_capacity: Battery capacity to support overshoot when increasing consumption (turning on loads)
+            available_charge_capacity: Battery capacity to absorb overshoot by charging MORE
+            available_discharge_capacity: Battery capacity to support overshoot by discharging
+            available_charge_reduction: Battery capacity to offset overshoot by charging LESS (current charging power)
             
         Returns:
             Dict with 'action' (LoadSwitchingAction) and 'remaining' power
@@ -33,6 +34,7 @@ class LoadSwitchingTool:
         # Store for internal methods
         self._available_charge_capacity = available_charge_capacity
         self._available_discharge_capacity = available_discharge_capacity
+        self._available_charge_reduction = available_charge_reduction
 
         if mode == "frrup":
             if power_needed < 0:
@@ -146,15 +148,26 @@ class LoadSwitchingTool:
         loads_switched = []
         
         for device in available_loads:
-            # Select device if it fits within the remaining power needed OR if battery can support the overshoot
-            # Overshoot allowed = power_needed + available_discharge_capacity
-            if device.estimated_power <= (power_needed - power_consumed + self._available_discharge_capacity):
+            # Calculate potential overshoot if we switch on this load
+            remaining_deficit = power_needed - power_consumed
+            overshoot = device.estimated_power - remaining_deficit
+            
+            if overshoot <= 0:
+                # Load fits perfectly within remaining deficit
                 loads_switched.append(device.name)
                 power_consumed += device.estimated_power
-                
-                # Stop if we already met/exceeded the requirement
-                if power_consumed >= power_needed:
-                    break
+            elif overshoot <= self._available_charge_reduction:
+                # Load would overshoot, but battery can REDUCE its charging to compensate
+                # This allows combining Heating+Battery to hit target exactly
+                loads_switched.append(device.name)
+                power_consumed += device.estimated_power
+            else:
+                # Load too big and battery can't compensate - skip this load
+                continue
+            
+            # Stop if we already met/exceeded the requirement
+            if power_consumed >= power_needed:
+                break
             
         if not loads_switched:
             return {'action': None, 'remaining': power_needed}
