@@ -63,6 +63,9 @@ class LoadSchedulingApp(hass.Hass):
             # History of last 20 recoveries
             self.recent_recoveries = deque(maxlen=20)
             
+            # Load persistent data (energy debt) from disk
+            self._load_persistence_data()
+            
             # Schedule daily calculation using robust timezone handling
             self._schedule_next_run()
             
@@ -100,8 +103,14 @@ class LoadSchedulingApp(hass.Hass):
                 self._service_override_device
             )
             
-            # Register dashboard API endpoint
+            self.register_service(
+                "loads/reset_debt",
+                self._service_reset_debt
+            )
+            
+            # Register dashboard API endpoints
             self.register_endpoint(self._dashboard_api, "load_scheduler_data")
+            self.register_endpoint(self._api_reset_debt, "load_scheduler_reset_debt")
             
             self.log(f"Initialized with {len(DEVICES)} devices")
             self.log(f"Daily schedule at {GLOBAL_CONFIG.schedule_time}")
@@ -267,6 +276,30 @@ class LoadSchedulingApp(hass.Hass):
                 return
         
         self.log(f"Device not found: {device_name}", level="WARNING")
+    
+    def _service_reset_debt(self, namespace, domain, service, kwargs):
+        """Reset energy debt for a device or all devices"""
+        device_name = kwargs.get('device_name')  # Optional - if not provided, reset all
+        
+        reset_count = 0
+        for device in DEVICES:
+            if device_name is None or device.name == device_name:
+                if hasattr(device, 'energy_debt') and device.energy_debt > 0:
+                    old_debt = device.energy_debt
+                    device.energy_debt = 0
+                    self._update_device_sensor_debt(device)
+                    self.log(f"Reset energy debt for {device.name}: {old_debt} -> 0")
+                    reset_count += 1
+        
+        if reset_count > 0:
+            # Only update debt fields in JSON, don't overwrite the whole file
+            self._update_debt_in_persistence()
+            self.fire_event("loads_debt_reset", devices=reset_count)
+            self.log(f"Energy debt reset for {reset_count} device(s)")
+        elif device_name:
+            self.log(f"Device not found or no debt: {device_name}", level="WARNING")
+        else:
+            self.log("No devices with debt to reset")
     
     def _update_sensors(self, result: dict):
         """Update Home Assistant sensors"""
@@ -436,6 +469,73 @@ class LoadSchedulingApp(hass.Hass):
             import traceback
             self.log(f"Traceback: {traceback.format_exc()}", level="ERROR")
             return {'error': str(e)}, 500
+    def _api_reset_debt(self, data, **kwargs):
+        """API endpoint for resetting energy debt
+        
+        Args:
+            data: JSON data from request, optionally containing 'device_name'
+            **kwargs: Additional parameters
+        """
+        try:
+            device_name = data.get('device_name') if data else None
+            
+            reset_count = 0
+            reset_devices = []
+            for device in DEVICES:
+                if device_name is None or device.name == device_name:
+                    if hasattr(device, 'energy_debt') and device.energy_debt > 0:
+                        old_debt = device.energy_debt
+                        device.energy_debt = 0
+                        self._update_device_sensor_debt(device)
+                        self.log(f"API: Reset energy debt for {device.name}: {old_debt} -> 0")
+                        reset_count += 1
+                        reset_devices.append(device.name)
+            
+            if reset_count > 0:
+                # Only update debt fields in JSON, don't overwrite the whole file
+                self._update_debt_in_persistence()
+                self.fire_event("loads_debt_reset", devices=reset_count)
+            
+            return {'success': True, 'reset_count': reset_count, 'devices': reset_devices}, 200
+            
+        except Exception as e:
+            self.log(f"Reset debt API error: {e}", level="ERROR")
+            return {'error': str(e)}, 500
+    
+    def _update_debt_in_persistence(self):
+        """Update only energy_debt fields in the persistence file, preserving everything else"""
+        try:
+            file_path = os.path.join(os.path.dirname(__file__), self.PERSISTENCE_FILE)
+            
+            # Load existing data
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+            else:
+                # No file - create minimal structure
+                data = {'devices': []}
+            
+            # Update debt values for each device
+            existing_devices = {d['name']: d for d in data.get('devices', [])}
+            
+            for device in DEVICES:
+                if device.name in existing_devices:
+                    existing_devices[device.name]['energy_debt'] = getattr(device, 'energy_debt', 0)
+                else:
+                    # Device not in file yet, add minimal entry
+                    data.setdefault('devices', []).append({
+                        'name': device.name,
+                        'energy_debt': getattr(device, 'energy_debt', 0)
+                    })
+            
+            # Write back
+            with open(file_path, 'w') as f:
+                json.dump(data, f)
+            
+            self.log("Updated debt values in persistence file")
+            
+        except Exception as e:
+            self.log(f"Failed to update debt in persistence: {e}", level="ERROR")
     
     def _load_persistence_data(self):
         """Load persistent data (energy debt) from disk"""

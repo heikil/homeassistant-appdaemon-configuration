@@ -77,6 +77,10 @@ const app = createApp({
             };
         });
 
+        const totalDebt = computed(() => {
+            return loads.value.devices.reduce((acc, d) => acc + (d.energy_debt || 0), 0);
+        });
+
         // Methods
         const formatPower = (w) => {
             if (Math.abs(w) >= 1000) return (w / 1000).toFixed(2) + ' kW';
@@ -113,6 +117,22 @@ const app = createApp({
             } catch (e) {
                 console.error("Fetch error", e);
                 isConnected.value = false;
+            }
+        };
+
+        const resetAllDebt = async () => {
+            try {
+                const response = await fetch('/api/appdaemon/load_scheduler_reset_debt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (response.ok) {
+                    // Refresh data after reset
+                    setTimeout(fetchAll, 500);
+                }
+            } catch (e) {
+                console.error("Reset debt error", e);
             }
         };
 
@@ -382,7 +402,9 @@ const app = createApp({
             recentLogs,
             recentLogs,
             formatPower,
-            refresh: fetchAll
+            refresh: fetchAll,
+            totalDebt,
+            resetAllDebt
         };
     }
 });

@@ -629,7 +629,7 @@ class PhaseBalancerRewrite(hass.Hass):
                 # flow_change is already inverted for FRRDOWN in main loop
                 flow_for_discharge = battery_flow_change
                 self.log_if_enabled(f"DEBUG discharge_limitation input: mode={mode}, battery_flow_change={battery_flow_change:.0f}W, flow_for_discharge={flow_for_discharge:.0f}W", level="DEBUG")
-                action = self._handle_discharge_limitation(system_state, flow_for_discharge)
+                action = self._handle_discharge_limitation(system_state, flow_for_discharge, mode)
                 if action:
                     self.log_if_enabled(f"DEBUG discharge_limitation output: action={action.get('action')}, remaining={action.get('remaining', 0):.0f}W", level="DEBUG")
                     if action['action'] is not None:
@@ -932,12 +932,15 @@ class PhaseBalancerRewrite(hass.Hass):
             )
         return None
 
-    def _handle_discharge_limitation(self, system_state, flow_change):
+    def _handle_discharge_limitation(self, system_state, flow_change, mode='normal'):
         """
         Handle discharge limitation tool logic - bidirectional.
         
         Positive flow_change = reduce discharge (surplus OR need more grid import in FRRDOWN)
         Negative flow_change = increase discharge (deficit OR allow more export)
+        
+        IMPORTANT: In FRRDOWN mode, deficit (flow_change < 0) means we need MORE import.
+        Do NOT increase discharge limit - pass through to forced_charging instead.
         """
         current_discharge_limit = system_state['discharging_rate_limit']
         current_battery_power = system_state['battery_power']
@@ -969,6 +972,11 @@ class PhaseBalancerRewrite(hass.Hass):
             
         elif flow_change < 0:
             # DEFICIT: Increase discharge limit to allow more discharge
+            # BUT: In FRRDOWN mode, deficit means we need MORE IMPORT, not more discharge!
+            # Skip this and let forced_charging handle it.
+            if mode == 'frrdown':
+                return {'action': None, 'remaining': flow_change}
+            
             increase_amount = min(abs(flow_change), self.config.max_battery_power - current_discharge_limit)
             if increase_amount >= self.config.minimum_charging_adjustment_watts:
                 new_limit = current_discharge_limit + increase_amount
@@ -1062,6 +1070,14 @@ class PhaseBalancerRewrite(hass.Hass):
 
         if load_parts:
             parts.append(f"L:{'+'.join(load_parts)}")
+        
+        # Add mFRR target (T:) for frrup/frrdown modes
+        if mode in ['frrup', 'frrdown']:
+            qw_powerlimit = self.data_manager.get_sensor_value(self.config.qw_powerlimit_sensor, use_fallback=True)
+            if qw_powerlimit is not None:
+                # frrup = positive target (import), frrdown = negative target (export)
+                target = qw_powerlimit if mode == 'frrup' else -qw_powerlimit
+                parts.append(f"T:{target:.0f}W")
         
         # Add flow change/target if non-zero
         if energy_flow.battery_flow_change != 0:

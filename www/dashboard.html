@@ -250,6 +250,13 @@
                     </div>
 
                     <!-- Devices Grid -->
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold text-gray-400 uppercase">Devices</h3>
+                        <button v-if="totalDebt > 0" @click="resetAllDebt"
+                            class="px-3 py-1 text-xs bg-orange-900/30 hover:bg-orange-800/50 text-orange-400 border border-orange-700/50 rounded transition-colors">
+                            Reset All Debt ({{ totalDebt }}m)
+                        </button>
+                    </div>
                     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                         <div v-for="device in loads.devices" :key="device.name" class="card p-4 flex flex-col gap-3">
                             <div class="flex justify-between items-start">
