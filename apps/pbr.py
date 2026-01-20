@@ -409,6 +409,10 @@ class PhaseBalancerRewrite(hass.Hass):
                 # Heating protection applied - skip balancing
                 return
 
+            # BATTERY FULL PROTECTION: When battery is 100% SOC in FRRDOWN, prevent discharge
+            # Battery can't charge at 100% and may auto-discharge, working against import goal
+            self._apply_battery_full_protection(system_state, current_mode)
+
             # Initialize mode manager on first run
             if self.mode_manager is None:
                 self.mode_manager = ModeManager(self, self.tools)
@@ -557,6 +561,56 @@ class PhaseBalancerRewrite(hass.Hass):
             return True
         
         # Unknown mode - allow normal operation
+        return False
+
+    def _apply_battery_full_protection(self, system_state, mode):
+        """
+        Apply battery full protection in FRRDOWN mode.
+        
+        When battery reaches 100% SOC during FRRDOWN:
+        - Battery cannot charge (physically full)
+        - Inverter may auto-discharge to protect battery
+        - This discharge REDUCES grid import, working AGAINST FRRDOWN goal
+        
+        Solution: Set discharge limit to 0 to prevent battery from discharging.
+        This forces battery idle and lets loads handle the import requirement.
+        
+        Returns:
+            False always (don't skip balancing, just prevent discharge)
+        """
+        # Only applies to FRRDOWN mode
+        if mode != 'frrdown':
+            return False
+        
+        battery_soc = system_state.get('battery_soc', 0)
+        
+        # Only trigger at 100% SOC
+        if battery_soc < 100:
+            return False
+        
+        # Check current discharge limit and forced power state
+        current_discharge_limit = system_state.get('discharging_rate_limit', 0)
+        forced_power_flow = system_state.get('forced_power_flow', 0)
+        
+        # Set discharge limit to 0 if not already
+        if current_discharge_limit > 0:
+            self.log_if_enabled(f"BATTERY FULL PROTECTION: SOC={battery_soc}% - setting discharge limit to 0W for FRRDOWN")
+            from pbr_actions import DischargeLimitationAction
+            protection_action = DischargeLimitationAction(
+                target_limit=0,
+                reason=f"Battery full protection: SOC={battery_soc}% (prevent discharge in FRRDOWN)"
+            )
+            self.action_executor.execute_actions([protection_action], mode)
+        
+        # Stop forced charging if active (pointless at 100% SOC)
+        if forced_power_flow > 0:
+            self.log_if_enabled(f"BATTERY FULL PROTECTION: Stopping forced charging (SOC={battery_soc}%)")
+            self.tools['forced_charging'].stop(reason=f"Battery full: SOC={battery_soc}%")
+        
+        # Update system state to reflect protection
+        system_state['discharging_rate_limit'] = 0
+        
+        # Don't skip balancing - load switching can still help
         return False
 
     def get_mode_tool_sequence(self, mode, surplus=False):
@@ -905,6 +959,14 @@ class PhaseBalancerRewrite(hass.Hass):
             
         elif flow_change < 0:
             # DEFICIT: Increase charging from grid
+            
+            # FRRDOWN + Battery Full: Skip charging (impossible at 100% SOC)
+            # Pass the full deficit to load_switching instead
+            battery_soc = system_state.get('battery_soc', 0)
+            if mode == 'frrdown' and battery_soc >= 100:
+                self.log_if_enabled(f"Forced charging skipped: Battery full ({battery_soc}% SOC) - passing to load_switching")
+                return {'action': None, 'remaining': flow_change}
+            
             max_additional = self.config.max_battery_power - current_charging
             increase_amount = min(abs(flow_change), max_additional)
             

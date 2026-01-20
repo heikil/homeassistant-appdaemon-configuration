@@ -206,11 +206,21 @@ class ModeManager:
         if new_mode == self.current_mode and new_source == self.current_source:
             return False
 
+        # Store previous mode for load restoration check
+        previous_mode = self.current_mode
+
         # Log the transition
         if self.current_mode is None:
             self.hass.log_if_enabled(f"Initial mode: {new_mode} (source: {new_source})")
         else:
             self.hass.log_if_enabled(f"Mode transition: {self.current_mode} → {new_mode} (source: {new_source})")
+
+        # Restore load states when exiting mFRR modes
+        # mFRR modes may have switched loads ON/OFF via overrides - restore to schedule
+        if previous_mode in Config.mfrr_modes and new_mode not in Config.mfrr_modes:
+            if 'load_switching' in self.tools:
+                self.hass.log_if_enabled(f"Restoring load states after mFRR mode exit")
+                self.tools['load_switching'].restore_state()
 
         # Apply initial state for new mode
         self._apply_mode_initial_state(new_mode)
@@ -315,9 +325,6 @@ class ModeManager:
                 callback=service_call_callback
             )
         # 'keep' means don't change
-
-        # TODO: Future - handle load switching during transitions
-        # self._handle_load_switching(mode)
 
         self.hass.log_if_enabled(f"Initial state for {mode}: export={initial_state['export_limit']}, charging={initial_state['charging_limit']}, discharge={initial_state['discharge_limit']}")
         

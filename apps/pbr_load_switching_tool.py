@@ -192,15 +192,22 @@ class LoadSwitchingTool:
         return (day_slot + 8) % 96
 
     def restore_state(self):
-        """Restore devices to their scheduled state"""
+        """Restore devices to their scheduled state from JSON source of truth"""
         current_slot = self._get_current_slot()
+        
+        # Read schedule from JSON file (source of truth)
+        schedule_data = self._read_schedule_from_json()
         
         for device in self.devices:
             if not device.scheduling_enabled:
                 continue
-                
+            
+            # Get schedule from JSON, fallback to in-memory if not found
+            device_schedule = schedule_data.get(device.name, {})
+            scheduled_slots = device_schedule.get('slots', device.scheduled_slots)
+            
             # Determine desired state from schedule
-            should_be_on = device.scheduled_slots[current_slot]
+            should_be_on = scheduled_slots[current_slot] if current_slot < len(scheduled_slots) else False
             
             # Get actual state
             entity_state = self.hass.get_state(device.entity_id)
@@ -213,3 +220,26 @@ class LoadSwitchingTool:
                     device_name=device.name,
                     turn_on=should_be_on
                 )
+
+    def _read_schedule_from_json(self) -> Dict:
+        """Read schedule data from JSON file (source of truth)"""
+        import json
+        import os
+        try:
+            file_path = "/conf/apps/loads_api_data.json"
+            if not os.path.exists(file_path):
+                return {}
+            
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+            
+            # Build name -> device dict
+            result = {}
+            for device in data.get('devices', []):
+                name = device.get('name')
+                if name:
+                    result[name] = device
+            return result
+        except Exception:
+            return {}
+

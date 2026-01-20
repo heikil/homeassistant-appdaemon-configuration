@@ -402,8 +402,6 @@ class DataManager:
                 'forced_power_flow': self._get_current_forced_power_flow(),
                 'heating_active': self.get_sensor_value(Config.heating_switch, use_fallback=True) == "on",
                 'boiler_active': self.get_sensor_value(Config.boiler_switch, use_fallback=True) == "on",
-                'heating_active': self.get_sensor_value(Config.heating_switch, use_fallback=True) == "on",
-                'boiler_active': self.get_sensor_value(Config.boiler_switch, use_fallback=True) == "on",
                 'timestamp': time.time(),
                 
                 # Aliases and Derived Values for API/Dashboard

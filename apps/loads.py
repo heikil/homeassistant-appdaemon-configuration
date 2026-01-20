@@ -194,6 +194,9 @@ class LoadSchedulingApp(hass.Hass):
                 self.log(f"  Total slots: {result['total_slots']}")
                 self.log(f"  Shelly schedules created: {result['shelly']['created']}")
                 
+                # Store calculation timestamp
+                self.schedule_calculated_at = self.datetime().isoformat()
+                
                 # Update HA sensors
                 self._update_sensors(result)
                 
@@ -407,7 +410,7 @@ class LoadSchedulingApp(hass.Hass):
             price_slots = self.scheduler.price_slots
         
         return {
-            'calculated_at': self.datetime().isoformat(),
+            'calculated_at': getattr(self, 'schedule_calculated_at', None) or self.datetime().isoformat(),
             'prices': [
                 {
                     'time': slot.timestamp.strftime('%H:%M'),
