@@ -42,6 +42,7 @@ class FastPhaseTrigger:
         get_soc_callback: Optional[Callable] = None,
         get_heating_active_callback: Optional[Callable] = None,
         log_if_enabled_callback: Optional[Callable] = None,
+        get_forced_power_callback: Optional[Callable] = None,
     ):
         """
         Initialize fast phase trigger.
@@ -53,7 +54,9 @@ class FastPhaseTrigger:
             config: Config class with fast trigger settings
             get_last_execution_callback: Function to get timestamp of last control loop execution
             get_soc_callback: Function to get current battery SOC % (optional)
+            get_heating_active_callback: Function to check if heating is active (optional)
             log_if_enabled_callback: Function to log messages (respects logging toggle)
+            get_forced_power_callback: Function to get current forced power (optional)
         """
         self.hass = hass_instance
         self.trigger_callback = trigger_callback
@@ -64,6 +67,8 @@ class FastPhaseTrigger:
         self.get_heating_active = get_heating_active_callback
         # Optional callback for logging (respects logging toggle)
         self.log_if_enabled = log_if_enabled_callback if log_if_enabled_callback else self.hass.log
+        # Optional callback for getting forced power (negative = discharging)
+        self.get_forced_power = get_forced_power_callback
         self.config = config
         
         # Per-phase history buffers (store last 2 readings)
@@ -180,6 +185,17 @@ class FastPhaseTrigger:
                 #                   f"({time_since_last:.1f}s < {self.config.fast_trigger_minimum_interval}s)")
                 pass
             return False
+        
+        # Check if battery is already at max discharge (no point triggering)
+        if self.get_forced_power:
+            try:
+                forced_power = self.get_forced_power()
+                # Forced power is negative when discharging
+                if forced_power is not None and forced_power <= -self.config.max_battery_power:
+                    # Already at max discharge - nothing more we can do
+                    return False
+            except Exception:
+                pass  # If check fails, allow triggering
         
         # All conditions met
         return True

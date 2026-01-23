@@ -93,7 +93,8 @@ class PhaseBalancerRewrite(hass.Hass):
                 get_last_execution_callback=lambda: self.last_control_loop_execution,
                 get_soc_callback=lambda: self.data_manager.get_sensor_value(self.config.battery_soc_sensor),
                 get_heating_active_callback=lambda: (self.get_current_system_state() or {}).get('heating_active', False),
-                log_if_enabled_callback=self.log_if_enabled
+                log_if_enabled_callback=self.log_if_enabled,
+                get_forced_power_callback=lambda: (self.get_current_system_state() or {}).get('forced_power_flow', 0)
             )
 
         self.log_if_enabled("Phase Balancer Rewrite - Initializing...")
